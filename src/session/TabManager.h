@@ -53,6 +53,7 @@ public:
 
     void Activate(std::size_t index);
     void ActivateNext();
+    void CloseAt(std::size_t index);
     void CloseSelected();
 
     int selectedIndex() const { return selectedIndex_; }

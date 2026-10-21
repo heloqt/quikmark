@@ -5,6 +5,7 @@
 #include <wx/file.h>
 #include <wx/filename.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -178,10 +179,27 @@ void TabManager::CloseSelected() {
     if (selectedIndex_ < 0 || static_cast<std::size_t>(selectedIndex_) >= tabs_.size()) {
         return;
     }
-    tabs_.erase(tabs_.begin() + selectedIndex_);
+    CloseAt(static_cast<std::size_t>(selectedIndex_));
+}
+
+void TabManager::CloseAt(std::size_t index) {
+    if (index >= tabs_.size()) {
+        return;
+    }
+
+    const int previousSelected = selectedIndex_;
+    tabs_.erase(tabs_.begin() + static_cast<std::ptrdiff_t>(index));
     if (tabs_.empty()) {
         selectedIndex_ = -1;
-    } else if (selectedIndex_ >= static_cast<int>(tabs_.size())) {
+    } else if (previousSelected > static_cast<int>(index)) {
+        selectedIndex_ = previousSelected - 1;
+    } else if (previousSelected == static_cast<int>(index)) {
+        selectedIndex_ =
+            std::min(static_cast<int>(index), static_cast<int>(tabs_.size()) - 1);
+    } else {
+        selectedIndex_ = previousSelected;
+    }
+    if (selectedIndex_ >= static_cast<int>(tabs_.size())) {
         selectedIndex_ = static_cast<int>(tabs_.size()) - 1;
     }
 }

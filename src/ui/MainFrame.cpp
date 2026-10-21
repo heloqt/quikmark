@@ -68,6 +68,7 @@ MainFrame::MainFrame(ThemeController& theme)
     SetDropTarget(new MainFrameDropTarget(*this));
 
     tabStrip_->SetOnSelect([this](int index) { ActivateTab(index); });
+    tabStrip_->SetOnClose([this](int index) { CloseTab(index); });
     theme_.SetOnChanged([this]() { ApplyTheme(); });
 
     BindEvents();
@@ -290,8 +291,15 @@ void MainFrame::ActivateTab(int index) {
 }
 
 void MainFrame::CloseCurrentTab() {
+    CloseTab(tabs_.selectedIndex());
+}
+
+void MainFrame::CloseTab(int index) {
+    if (index < 0 || static_cast<std::size_t>(index) >= tabs_.tabs().size()) {
+        return;
+    }
     SaveCurrentScroll();
-    const TabSession* current = tabs_.selected();
+    const TabSession* current = &tabs_.tabs()[static_cast<std::size_t>(index)];
     if (current != nullptr) {
         const std::uint64_t closingId = current->id;
         for (auto& task : parseTasks_) {
@@ -301,7 +309,7 @@ void MainFrame::CloseCurrentTab() {
         }
         documentView_->ForgetDocument(current->document);
     }
-    tabs_.CloseSelected();
+    tabs_.CloseAt(static_cast<std::size_t>(index));
     if (tabs_.tabs().empty()) {
         Close(true);
         return;

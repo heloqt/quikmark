@@ -57,6 +57,7 @@ private:
     void OnParseCompleted(wxThreadEvent& event);
     void SaveCurrentScroll();
     void ActivateTab(int index);
+    void CloseTab(int index);
     void CloseCurrentTab();
     void OnOpen(wxCommandEvent& event);
     void OnReload(wxCommandEvent& event);
