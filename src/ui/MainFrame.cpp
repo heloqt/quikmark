@@ -1,6 +1,7 @@
 #include "ui/MainFrame.h"
 
 #include "core/parser/MarkdownParser.h"
+#include "platform/windows/PerformanceTrace.h"
 #include "platform/windows/FileAssociation.h"
 #include "ui/DocumentView.h"
 #include "ui/TabStrip.h"
@@ -159,6 +160,8 @@ void MainFrame::CreateMenuBar() {
 
     auto* viewMenu = new wxMenu();
     viewMenu->AppendSubMenu(appearanceMenu, U8("外观"));
+    viewMenu->Append(ID_NEXT_TAB, U8("下一个 Tab\tCtrl+Tab"));
+    viewMenu->Append(ID_PREVIOUS_TAB, U8("上一个 Tab\tCtrl+Shift+Tab"));
     viewMenu->AppendSeparator();
     wxMenuItem* outline = viewMenu->Append(ID_OUTLINE, U8("目录（P2）"));
     outline->Enable(false);
@@ -173,6 +176,9 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnOpen, this, wxID_OPEN);
     Bind(wxEVT_MENU, &MainFrame::OnReload, this, ID_RELOAD);
     Bind(wxEVT_MENU, &MainFrame::OnCloseTab, this, ID_CLOSE_TAB);
+    Bind(wxEVT_MENU, &MainFrame::OnNextTab, this, ID_NEXT_TAB);
+    Bind(wxEVT_MENU, &MainFrame::OnPreviousTab, this,
+         ID_PREVIOUS_TAB);
     Bind(wxEVT_MENU, &MainFrame::OnRegisterFileAssociation, this,
          ID_REGISTER_FILE_ASSOCIATION);
     Bind(wxEVT_MENU, &MainFrame::OnExit, this, wxID_EXIT);
@@ -349,14 +355,19 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
             documentView_->Update();
             const auto start = parseStartTimes_.find(result.tabId);
             if (start != parseStartTimes_.end()) {
-                const auto elapsed = std::chrono::duration_cast<
-                    std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - start->second);
+                documentView_->TraceNextPaint("hot_open", start->second);
+                if (!coldStartTraced_) {
+                    documentView_->TraceNextPaintProcessAge("cold_start");
+                    coldStartTraced_ = true;
+                }
                 wxString perfLogPath;
                 if (wxGetEnv("LITEMARK_PERF_LOG", &perfLogPath) &&
                     !perfLogPath.empty()) {
                     const wxScopedCharBuffer utf8 = perfLogPath.ToUTF8();
                     std::ofstream log(utf8.data(), std::ios::app);
+                    const auto elapsed = std::chrono::duration_cast<
+                        std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - start->second);
                     log << elapsed.count() / 1000.0 << '\n';
                 }
             }
@@ -426,9 +437,38 @@ void MainFrame::ActivateTab(int index) {
     if (index < 0 || static_cast<std::size_t>(index) >= tabs_.tabs().size()) {
         return;
     }
+    const auto start = std::chrono::steady_clock::now();
     SaveCurrentScroll();
     tabs_.Activate(static_cast<std::size_t>(index));
     UpdateFromTabs();
+    documentView_->TraceNextPaint("tab_switch", start);
+    documentView_->Update();
+}
+
+void MainFrame::ActivateNextTab() {
+    if (tabs_.tabs().size() < 2) {
+        return;
+    }
+    const int next =
+        (tabs_.selectedIndex() + 1) % static_cast<int>(tabs_.tabs().size());
+    ActivateTab(next);
+}
+
+void MainFrame::ActivatePreviousTab() {
+    if (tabs_.tabs().size() < 2) {
+        return;
+    }
+    const int count = static_cast<int>(tabs_.tabs().size());
+    const int previous = (tabs_.selectedIndex() + count - 1) % count;
+    ActivateTab(previous);
+}
+
+void MainFrame::OnNextTab(wxCommandEvent&) {
+    ActivateNextTab();
+}
+
+void MainFrame::OnPreviousTab(wxCommandEvent&) {
+    ActivatePreviousTab();
 }
 
 void MainFrame::CloseCurrentTab() {

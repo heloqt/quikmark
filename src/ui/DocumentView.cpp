@@ -2,6 +2,7 @@
 
 #include "core/flow/Flowchart.h"
 #include "platform/windows/ImageDownloader.h"
+#include "platform/windows/PerformanceTrace.h"
 
 #include <wx/app.h>
 #include <wx/bitmap.h>
@@ -20,12 +21,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <queue>
 #include <set>
 #include <string>
@@ -479,6 +482,12 @@ ExternalLinkResult OpenExternalLink(const wxString& href) {
 namespace litemark {
 
 struct DocumentView::Impl {
+    struct PendingPaintTrace {
+        std::string event;
+        std::optional<std::chrono::steady_clock::time_point> start;
+        bool processAge = false;
+    };
+
     struct ImageTask {
         std::thread thread;
         std::shared_ptr<std::atomic_bool> cancelled;
@@ -517,6 +526,8 @@ struct DocumentView::Impl {
         "这是一个只读 Markdown 阅读器。\n"
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
     BlockLayout* tableDrag = nullptr;
+    std::optional<std::chrono::steady_clock::time_point> scrollRequestedAt;
+    std::vector<PendingPaintTrace> pendingPaintTraces;
 
     ~Impl() {
         for (auto& task : imageTasks) {
@@ -2013,6 +2024,22 @@ void DocumentView::SetDocument(
     Refresh();
 }
 
+void DocumentView::TraceNextPaint(
+    const std::string& event,
+    std::chrono::steady_clock::time_point start) {
+    if (PerformanceTraceEnabled()) {
+        impl_->pendingPaintTraces.push_back(
+            Impl::PendingPaintTrace{event, start, false});
+    }
+}
+
+void DocumentView::TraceNextPaintProcessAge(const std::string& event) {
+    if (PerformanceTraceEnabled()) {
+        impl_->pendingPaintTraces.push_back(
+            Impl::PendingPaintTrace{event, std::nullopt, true});
+    }
+}
+
 void DocumentView::OnImageLoaded(wxThreadEvent& event) {
     const ImageLoadedPayload payload =
         event.GetPayload<ImageLoadedPayload>();
@@ -2154,6 +2181,9 @@ void DocumentView::OnMouseWheel(wxMouseEvent& event) {
         int x = 0;
         int y = 0;
         GetViewStart(&x, &y);
+        if (PerformanceTraceEnabled()) {
+            impl_->scrollRequestedAt = std::chrono::steady_clock::now();
+        }
         Scroll(0, std::max(0, y - distance));
         Refresh(false);
     }
@@ -2226,6 +2256,11 @@ void DocumentView::OnLeftUp(wxMouseEvent& event) {
 }
 
 void DocumentView::OnPaint(wxPaintEvent&) {
+    const std::optional<std::chrono::steady_clock::time_point> paintStart =
+        PerformanceTraceEnabled()
+            ? std::optional<std::chrono::steady_clock::time_point>(
+                  std::chrono::steady_clock::now())
+            : std::nullopt;
     wxAutoBufferedPaintDC dc(this);
     DoPrepareDC(dc);
 
@@ -2280,6 +2315,38 @@ void DocumentView::OnPaint(wxPaintEvent&) {
         const int target = impl_->pendingScrollY;
         impl_->pendingScrollY = 0;
         CallAfter([this, target]() { Scroll(0, target); });
+    }
+
+    if (paintStart) {
+        const auto finished = std::chrono::steady_clock::now();
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                finished - *paintStart);
+        std::optional<double> scrollMicroseconds;
+        if (impl_->scrollRequestedAt) {
+            scrollMicroseconds = static_cast<double>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    finished - *impl_->scrollRequestedAt)
+                    .count());
+            impl_->scrollRequestedAt.reset();
+        }
+        TraceEvent("paint", static_cast<double>(elapsed.count()));
+        if (scrollMicroseconds) {
+            TraceEvent("scroll", *scrollMicroseconds);
+        }
+        for (const Impl::PendingPaintTrace& trace :
+             impl_->pendingPaintTraces) {
+            const double microseconds =
+                trace.processAge
+                    ? static_cast<double>(ProcessAgeMicroseconds())
+                    : static_cast<double>(
+                          std::chrono::duration_cast<
+                              std::chrono::microseconds>(
+                              finished - *trace.start)
+                              .count());
+            TraceEvent(trace.event.c_str(), microseconds);
+        }
+        impl_->pendingPaintTraces.clear();
     }
 }
 

@@ -46,6 +46,8 @@ private:
         ID_APPEARANCE_LIGHT,
         ID_APPEARANCE_DARK,
         ID_OUTLINE,
+        ID_NEXT_TAB,
+        ID_PREVIOUS_TAB,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -73,6 +75,10 @@ private:
     void OnChangeTimer(wxTimerEvent& event);
     void SaveCurrentScroll();
     void ActivateTab(int index);
+    void ActivateNextTab();
+    void ActivatePreviousTab();
+    void OnNextTab(wxCommandEvent& event);
+    void OnPreviousTab(wxCommandEvent& event);
     void CloseTab(int index);
     void CloseCurrentTab();
     void OnOpen(wxCommandEvent& event);
@@ -95,6 +101,7 @@ private:
     std::vector<std::unique_ptr<ParseTask>> parseTasks_;
     std::map<std::uint64_t, std::chrono::steady_clock::time_point>
         parseStartTimes_;
+    bool coldStartTraced_ = false;
 };
 
 }  // namespace litemark

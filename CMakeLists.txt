@@ -45,6 +45,7 @@ add_executable(litemark WIN32
     src/platform/windows/FileAssociation.cpp
     src/platform/windows/ImageDownloader.cpp
     src/platform/windows/IpcServer.cpp
+    src/platform/windows/PerformanceTrace.cpp
     src/platform/windows/SingletonGuard.cpp
     src/session/TabManager.cpp
     src/ui/DocumentView.cpp

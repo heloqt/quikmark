@@ -5,7 +5,9 @@
 
 #include <wx/scrolwin.h>
 
+#include <chrono>
 #include <memory>
+#include <string>
 
 class wxPaintEvent;
 class wxSizeEvent;
@@ -24,6 +26,10 @@ public:
     void SetDocument(std::shared_ptr<const MarkdownDocument> document,
                      const wxString& basePath,
                      int scrollY = 0);
+    void TraceNextPaint(
+        const std::string& event,
+        std::chrono::steady_clock::time_point start);
+    void TraceNextPaintProcessAge(const std::string& event);
     void ForgetDocument(
         const std::shared_ptr<const MarkdownDocument>& document);
     int ScrollY() const;
