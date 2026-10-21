@@ -1,15 +1,20 @@
 #include "ui/DocumentView.h"
 
+#include <wx/app.h>
+#include <wx/cursor.h>
 #include <wx/dc.h>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
 #include <wx/font.h>
 #include <wx/fontenum.h>
+#include <wx/msgdlg.h>
+#include <wx/utils.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <numeric>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -18,6 +23,9 @@
 namespace {
 
 constexpr double kMouseWheelPageFraction = 0.45;
+constexpr double kFontZoomStep = 0.10;
+constexpr double kMinFontScale = 0.75;
+constexpr double kMaxFontScale = 2.00;
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
@@ -52,6 +60,7 @@ struct TextStyle {
 struct Segment {
     wxString text;
     TextStyle style;
+    wxString href;
     int x = 0;
     int width = 0;
 };
@@ -88,6 +97,10 @@ struct BlockLayout {
     int height = 0;
     TextLayout text;
     std::vector<RowLayout> tableRows;
+    int tableContentWidth = 0;
+    int tableRowsHeight = 0;
+    int tableScrollX = 0;
+    int tableScrollbarHeight = 0;
     wxString marker;
     int markerX = 0;
     int markerY = 0;
@@ -140,6 +153,11 @@ wxFont BuildFont(const TextStyle& style) {
     return font;
 }
 
+int ScaledPointSize(int pointSize, double fontScale) {
+    return std::clamp(
+        static_cast<int>(std::lround(pointSize * fontScale)), 6, 72);
+}
+
 TextStyle BaseStyle(const litemark::Block& block) {
     TextStyle style;
     switch (block.kind) {
@@ -182,13 +200,16 @@ using FontMap =
 
 void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                      const std::vector<litemark::InlineSpan>& spans,
-                     const TextStyle& baseStyle, FontMap* fonts) {
+                     const TextStyle& baseStyle, double fontScale,
+                     FontMap* fonts) {
     maxWidth = std::max(20, maxWidth);
     auto fontFor = [&](const TextStyle& style) -> wxFont {
+        TextStyle scaled = style;
+        scaled.pointSize = ScaledPointSize(style.pointSize, fontScale);
         if (fonts == nullptr) {
-            return BuildFont(style);
+            return BuildFont(scaled);
         }
-        auto result = fonts->try_emplace(style.key(), BuildFont(style));
+        auto result = fonts->try_emplace(scaled.key(), BuildFont(scaled));
         return result.first->second;
     };
 
@@ -221,7 +242,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
     };
 
     auto appendSegment = [&](const wxString& text, const TextStyle& style,
-                             int width) {
+                             const wxString& href, int width) {
         Line& line = ensureLine();
         dc.SetFont(fontFor(style));
         const int oldHeight = line.height;
@@ -233,17 +254,19 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                 last.style.code == style.code &&
                 last.style.image == style.image &&
                 last.style.link == style.link &&
-                last.style.strikethrough == style.strikethrough;
+                last.style.strikethrough == style.strikethrough &&
+                last.href == href;
             if (sameStyle) {
                 last.text += text;
                 last.width += width;
                 line.width += width;
             } else {
-                line.segments.push_back({text, style, line.width, width});
+                line.segments.push_back(
+                    {text, style, href, line.width, width});
                 line.width += width;
             }
         } else {
-            line.segments.push_back({text, style, 0, width});
+            line.segments.push_back({text, style, href, 0, width});
             line.width = width;
         }
         if (line.height < oldHeight) {
@@ -272,6 +295,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
         style.image = sourceSpan.image;
         style.link = !sourceSpan.image && !sourceSpan.href.empty();
         style.underline = style.underline || style.link;
+        const wxString href = wxString::FromUTF8(sourceSpan.href);
 
         while (!text.empty()) {
             const int newline = text.Find('\n');
@@ -322,7 +346,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
 
                 wxString piece = part.Left(fit);
                 const int pieceWidth = dc.GetTextExtent(piece).x;
-                appendSegment(piece, style, pieceWidth);
+                appendSegment(piece, style, href, pieceWidth);
                 part = part.Mid(fit);
                 if (!part.empty()) {
                     newLine();
@@ -366,26 +390,158 @@ int IntrinsicAfter(const litemark::Block& block) {
     return 7;
 }
 
+enum class ExternalLinkResult {
+    Opened,
+    Unsupported,
+    Failed
+};
+
+ExternalLinkResult OpenExternalLink(const wxString& href) {
+    const int colon = href.Find(':');
+    if (colon <= 0) {
+        return ExternalLinkResult::Unsupported;
+    }
+
+    const wxString scheme = href.Left(colon).Lower();
+    bool opened = false;
+    if (scheme == "http" || scheme == "https") {
+        opened = wxLaunchDefaultBrowser(href);
+    } else if (scheme == "mailto") {
+        opened = wxLaunchDefaultApplication(href);
+    } else {
+        return ExternalLinkResult::Unsupported;
+    }
+    return opened ? ExternalLinkResult::Opened : ExternalLinkResult::Failed;
+}
+
 }  // namespace
 
 namespace litemark {
 
 struct DocumentView::Impl {
+    DocumentView* owner = nullptr;
     std::shared_ptr<const MarkdownDocument> document;
     ThemePalette palette;
     std::shared_ptr<ViewLayout> layout;
     bool layoutDirty = true;
     int layoutWidth = 0;
     int pendingScrollY = 0;
+    double fontScale = 1.0;
+    double zoomWheelAccumulator = 0.0;
     FontMap fonts;
     std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
     wxString messageTitle = U8("liteMark");
     wxString messageBody = U8(
         "这是一个只读 Markdown 阅读器。\n"
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
+    BlockLayout* tableDrag = nullptr;
+
+    static int TableMaxScroll(const BlockLayout& item) {
+        return std::max(0, item.tableContentWidth - item.width);
+    }
+
+    static int TableThumbWidth(const BlockLayout& item) {
+        if (item.tableContentWidth <= 0) {
+            return item.width;
+        }
+        return std::max(28, item.width * item.width / item.tableContentWidth);
+    }
+
+    BlockLayout* TableAt(const wxPoint& point) {
+        if (!layout) {
+            return nullptr;
+        }
+        for (auto& [index, item] : layout->blockLayouts) {
+            (void)index;
+            if (item.block->kind != BlockKind::Table) {
+                continue;
+            }
+            if (point.x >= item.x && point.x <= item.x + item.width &&
+                point.y >= item.y &&
+                point.y <= item.y + item.tableRowsHeight +
+                               item.tableScrollbarHeight) {
+                return &item;
+            }
+        }
+        return nullptr;
+    }
+
+    wxString LinkAtInText(const TextLayout& text, int baseX, int baseY,
+                          const wxPoint& point) const {
+        for (const Line& line : text.lines) {
+            const int lineY = baseY + line.y;
+            if (point.y < lineY || point.y > lineY + line.height) {
+                continue;
+            }
+            for (const Segment& segment : line.segments) {
+                const int segmentX = baseX + segment.x;
+                if (!segment.href.empty() && segment.style.link &&
+                    point.x >= segmentX &&
+                    point.x <= segmentX + segment.width) {
+                    return segment.href;
+                }
+            }
+        }
+        return {};
+    }
+
+    wxString LinkAt(const wxPoint& point) {
+        if (!layout) {
+            return {};
+        }
+        const int padding = FromDIPValue(9);
+        for (const auto& [index, item] : layout->blockLayouts) {
+            (void)index;
+            if (item.block->kind == BlockKind::Table) {
+                if (point.x < item.x || point.x > item.x + item.width ||
+                    point.y < item.y ||
+                    point.y > item.y + item.tableRowsHeight) {
+                    continue;
+                }
+                for (const RowLayout& row : item.tableRows) {
+                    for (const CellLayout& cell : row.cells) {
+                        const wxString href = LinkAtInText(
+                            cell.text,
+                            item.x + cell.x - item.tableScrollX + padding,
+                            item.y + row.y + padding, point);
+                        if (!href.empty()) {
+                            return href;
+                        }
+                    }
+                }
+            } else {
+                const wxString href =
+                    LinkAtInText(item.text, item.x, item.y, point);
+                if (!href.empty()) {
+                    return href;
+                }
+            }
+        }
+        return {};
+    }
+
+    int FromDIPValue(int value) const {
+        const double scale = owner != nullptr ? owner->GetDPIScaleFactor() : 1.0;
+        return static_cast<int>(std::lround(value * scale));
+    }
+
+    void SetTableScrollFromX(BlockLayout& item, int x) {
+        const int maxScroll = TableMaxScroll(item);
+        if (maxScroll <= 0) {
+            item.tableScrollX = 0;
+            return;
+        }
+        const int thumbWidth = TableThumbWidth(item);
+        const int travel = std::max(1, item.width - thumbWidth);
+        const int thumbX =
+            std::clamp(x - item.x - thumbWidth / 2, 0, travel);
+        item.tableScrollX = thumbX * maxScroll / travel;
+    }
 
     wxFont FontFor(const TextStyle& style) {
-        auto result = fonts.try_emplace(style.key(), BuildFont(style));
+        TextStyle scaled = style;
+        scaled.pointSize = ScaledPointSize(style.pointSize, fontScale);
+        auto result = fonts.try_emplace(scaled.key(), BuildFont(scaled));
         return result.first->second;
     }
 
@@ -409,7 +565,9 @@ struct DocumentView::Impl {
         }
         if (block.kind == BlockKind::Table) {
             const int rows = std::max(1, static_cast<int>(block.tableRows.size()));
-            return before + rows * static_cast<int>(std::lround(30 * scale)) +
+            return before +
+                   rows * static_cast<int>(
+                              std::lround(30 * scale * fontScale)) +
                    after;
         }
 
@@ -428,7 +586,8 @@ struct DocumentView::Impl {
         }
 
         const int averageAdvance =
-            std::max(6, static_cast<int>(std::lround(9 * scale)));
+            std::max(6, static_cast<int>(
+                            std::lround(9 * scale * fontScale)));
         const int charsPerLine = std::max(8, width / averageAdvance);
         const int wrappedLines =
             std::max<std::size_t>(1, (characters + charsPerLine - 1) / charsPerLine);
@@ -442,7 +601,8 @@ struct DocumentView::Impl {
             lineHeight = 19;
         }
         const int body =
-            static_cast<int>(std::lround((lines * lineHeight + 12) * scale));
+            static_cast<int>(std::lround(
+                (lines * lineHeight * fontScale + 12) * scale));
         return before + body + after;
     }
 
@@ -534,7 +694,7 @@ struct DocumentView::Impl {
             raw[0].text = block.raw;
             const int padding = static_cast<int>(std::lround(10 * scale));
             BuildTextLayout(dc, item.text, width - padding * 2, raw, style,
-                            &fonts);
+                            fontScale, &fonts);
             item.height = item.text.height + padding * 2;
         } else {
             TextStyle style = BaseStyle(block);
@@ -543,7 +703,7 @@ struct DocumentView::Impl {
                     ? static_cast<int>(std::lround(27 * scale))
                     : 0;
             BuildTextLayout(dc, item.text, width - markerWidth, block.spans,
-                            style, &fonts);
+                            style, fontScale, &fonts);
             item.height = item.text.height;
             if (block.listMarker) {
                 item.marker = BlockMarker(block);
@@ -587,6 +747,30 @@ struct DocumentView::Impl {
         return U8("•");
     }
 
+    int MeasureCellWidth(wxDC& dc,
+                         const std::vector<litemark::InlineSpan>& spans,
+                         bool header) {
+        int widest = 0;
+        for (const auto& sourceSpan : spans) {
+            TextStyle style;
+            style.pointSize = 10;
+            style.bold = header || sourceSpan.bold;
+            style.italic = sourceSpan.italic;
+            style.mono = sourceSpan.code;
+            wxString text = wxString::FromUTF8(sourceSpan.text);
+            if (sourceSpan.image) {
+                text = text.empty() ? U8("[图片]")
+                                    : U8("[图片: ") + text + U8("]");
+            }
+            dc.SetFont(FontFor(style));
+            const wxArrayString lines = wxSplit(text, '\n', '\0');
+            for (const auto& line : lines) {
+                widest = std::max(widest, dc.GetTextExtent(line).x);
+            }
+        }
+        return widest;
+    }
+
     void BuildTableLayout(wxDC& dc, BlockLayout& item, int width,
                           double scale) {
         const Block& block = *item.block;
@@ -601,26 +785,92 @@ struct DocumentView::Impl {
         }
 
         const int cellPadding =
-            static_cast<int>(std::lround(7 * scale));
-        const int columnWidth =
-            std::max(50, (width - static_cast<int>(columnCount) - 1) /
-                              static_cast<int>(columnCount));
+            static_cast<int>(std::lround(9 * scale));
+        const int minColumnWidth =
+            static_cast<int>(std::lround(64 * scale));
+        const int maxMinColumnWidth =
+            static_cast<int>(std::lround(150 * scale));
+        const int desiredColumnWidth =
+            static_cast<int>(std::lround(380 * scale));
+
+        std::vector<int> minimums(columnCount, minColumnWidth);
+        std::vector<int> desired(columnCount, minColumnWidth);
+        for (std::size_t c = 0; c < columnCount; ++c) {
+            int contentWidth = 0;
+            for (std::size_t r = 0; r < rowCount; ++r) {
+                if (c < block.tableRows[r].size()) {
+                    contentWidth = std::max(
+                        contentWidth,
+                        MeasureCellWidth(dc, block.tableRows[r][c].spans,
+                                         r == 0));
+                }
+            }
+            desired[c] = std::clamp(contentWidth + cellPadding * 2,
+                                    minColumnWidth, desiredColumnWidth);
+            minimums[c] = std::clamp(desired[c], minColumnWidth,
+                                     maxMinColumnWidth);
+        }
+
+        const int totalMinimum =
+            std::accumulate(minimums.begin(), minimums.end(), 0);
+        const int totalDesired =
+            std::accumulate(desired.begin(), desired.end(), 0);
+        std::vector<int> columnWidths(columnCount, minColumnWidth);
+
+        if (totalDesired <= width) {
+            columnWidths = desired;
+        } else if (totalMinimum <= width) {
+            int flexible = 0;
+            for (std::size_t c = 0; c < columnCount; ++c) {
+                flexible += desired[c] - minimums[c];
+            }
+            const int extra = width - totalMinimum;
+            int assigned = 0;
+            for (std::size_t c = 0; c < columnCount; ++c) {
+                const int weight = desired[c] - minimums[c];
+                const int share =
+                    flexible > 0 ? extra * weight / flexible : 0;
+                columnWidths[c] = minimums[c] + share;
+                assigned += columnWidths[c];
+            }
+            if (!columnWidths.empty() && assigned < width) {
+                columnWidths.back() += width - assigned;
+            }
+        } else {
+            columnWidths = minimums;
+        }
+
+        item.tableContentWidth =
+            std::accumulate(columnWidths.begin(), columnWidths.end(), 0);
+        item.tableScrollX =
+            std::clamp(item.tableScrollX, 0,
+                       std::max(0, item.tableContentWidth - width));
+        item.tableScrollbarHeight =
+            item.tableContentWidth > width
+                ? static_cast<int>(std::lround(9 * scale))
+                : 0;
+
         int y = 0;
+        std::vector<int> columnX(columnCount, 0);
+        for (std::size_t c = 1; c < columnCount; ++c) {
+            columnX[c] = columnX[c - 1] + columnWidths[c - 1];
+        }
 
         for (std::size_t r = 0; r < rowCount; ++r) {
             RowLayout rowLayout;
             rowLayout.y = y;
             for (std::size_t c = 0; c < columnCount; ++c) {
                 CellLayout cell;
-                cell.x = static_cast<int>(c) * (columnWidth + 1) + 1;
-                cell.width = columnWidth;
+                cell.x = columnX[c];
+                cell.width = columnWidths[c];
                 TextStyle style;
                 style.pointSize = 10;
                 style.bold = r == 0;
                 if (c < block.tableRows[r].size()) {
                     BuildTextLayout(dc, cell.text,
-                                    columnWidth - cellPadding * 2,
-                                    block.tableRows[r][c].spans, style, &fonts);
+                                    columnWidths[c] - cellPadding * 2,
+                                    block.tableRows[r][c].spans, style,
+                                    fontScale, &fonts);
                 } else {
                     cell.text.height = 0;
                 }
@@ -633,10 +883,11 @@ struct DocumentView::Impl {
                     std::max(rowHeight, cell.text.height + cellPadding * 2);
             }
             rowLayout.height = rowHeight;
-            y += rowHeight + 1;
+            y += rowHeight;
             item.tableRows.push_back(std::move(rowLayout));
         }
-        item.height = y + 1;
+        item.tableRowsHeight = y;
+        item.height = y + item.tableScrollbarHeight;
     }
 
     void DrawPlaceholder(wxDC& dc, int scrollX, int scrollY, int clientWidth) {
@@ -650,13 +901,13 @@ struct DocumentView::Impl {
         std::vector<InlineSpan> titleSpan(1);
         titleSpan[0].text = messageTitle.ToUTF8().data();
         BuildTextLayout(dc, title, clientWidth - 80, titleSpan, titleStyle,
-                        &fonts);
+                        fontScale, &fonts);
 
         TextLayout body;
         std::vector<InlineSpan> bodySpans(1);
         bodySpans[0].text = messageBody.ToUTF8().data();
         BuildTextLayout(dc, body, clientWidth - 80, bodySpans, bodyStyle,
-                        &fonts);
+                        fontScale, &fonts);
 
         const int x = scrollX + 40;
         int y = scrollY + 36;
@@ -750,38 +1001,87 @@ struct DocumentView::Impl {
             return;
         }
 
+        const int padding = std::max(5, static_cast<int>(std::lround(
+                                           9 * (dc.GetPPI().x / 96.0))));
+        const int scrollX = item.tableScrollX;
+        dc.SetClippingRegion(item.x, item.y, item.width,
+                             item.tableRowsHeight);
         dc.SetPen(wxPen(palette.border, 1));
         dc.SetBrush(wxBrush(palette.documentBackground));
-        dc.DrawRectangle(item.x, item.y, item.width, item.height);
+        dc.DrawRectangle(item.x, item.y, item.width, item.tableRowsHeight);
 
-        if (!item.tableRows.empty()) {
-            dc.SetBrush(wxBrush(palette.codeBackground));
-            dc.DrawRectangle(item.x + 1, item.y + 1, item.width - 1,
-                             item.tableRows.front().height);
+        for (std::size_t r = 0; r < item.tableRows.size(); ++r) {
+            const RowLayout& row = item.tableRows[r];
+            if (r == 0) {
+                dc.SetBrush(wxBrush(palette.codeBackground));
+                dc.DrawRectangle(item.x, item.y + row.y, item.width,
+                                 row.height);
+            } else if (r % 2 == 0) {
+                dc.SetBrush(wxBrush(palette.windowBackground));
+                dc.DrawRectangle(item.x, item.y + row.y, item.width,
+                                 row.height);
+            }
         }
 
         for (const RowLayout& row : item.tableRows) {
             for (const CellLayout& cell : row.cells) {
-                DrawTextLayout(dc, cell.text, item.x + cell.x + 7,
-                               item.y + row.y + 7, false);
+                const int cellX = item.x + cell.x - scrollX;
+                if (cellX + cell.width < item.x ||
+                    cellX > item.x + item.width) {
+                    continue;
+                }
+                DrawTextLayout(dc, cell.text, cellX + padding,
+                               item.y + row.y + padding, false);
             }
-            dc.SetPen(wxPen(palette.border, 1));
-            dc.DrawLine(item.x, item.y + row.y, item.x + item.width,
-                        item.y + row.y);
         }
 
-        for (const auto& row : item.tableRows) {
-            for (const auto& cell : row.cells) {
+        for (std::size_t r = 0; r < item.tableRows.size(); ++r) {
+            const RowLayout& row = item.tableRows[r];
+            const int rowBottom = item.y + row.y + row.height;
+            if (r == 0) {
+                dc.SetPen(wxPen(palette.border, 2));
+            } else {
                 dc.SetPen(wxPen(palette.border, 1));
-                dc.DrawLine(item.x + cell.x, item.y + row.y,
-                            item.x + cell.x,
-                            item.y + row.y + row.height);
+            }
+            dc.DrawLine(item.x, rowBottom, item.x + item.width, rowBottom);
+
+            for (std::size_t c = 0; c + 1 < row.cells.size(); ++c) {
+                const int separatorX =
+                    item.x + row.cells[c].x + row.cells[c].width - scrollX;
+                if (separatorX > item.x && separatorX < item.x + item.width) {
+                    dc.SetPen(wxPen(palette.border, 1));
+                    dc.DrawLine(separatorX, item.y + row.y, separatorX,
+                                rowBottom);
+                }
             }
         }
-        dc.DrawLine(item.x + item.width, item.y, item.x + item.width,
-                    item.y + item.height);
-        dc.DrawLine(item.x, item.y + item.height, item.x + item.width,
-                    item.y + item.height);
+        dc.DestroyClippingRegion();
+
+        dc.SetPen(wxPen(palette.border, 1));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawRectangle(item.x, item.y, item.width, item.tableRowsHeight);
+
+        if (item.tableScrollbarHeight > 0) {
+            const int trackY = item.y + item.tableRowsHeight;
+            dc.SetPen(*wxTRANSPARENT_PEN);
+            dc.SetBrush(wxBrush(palette.codeBackground));
+            dc.DrawRectangle(item.x, trackY + 1, item.width,
+                             item.tableScrollbarHeight - 1);
+
+            const int thumbWidth = std::max(
+                static_cast<int>(std::lround(28 * (dc.GetPPI().x / 96.0))),
+                item.width * item.width / item.tableContentWidth);
+            const int maxScroll = item.tableContentWidth - item.width;
+            const int travel = std::max(0, item.width - thumbWidth);
+            const int thumbX =
+                item.x + (maxScroll > 0 ? travel * item.tableScrollX / maxScroll
+                                        : 0);
+            dc.SetBrush(wxBrush(palette.mutedText));
+            const int thumbHeight = std::max(3, item.tableScrollbarHeight - 4);
+            dc.DrawRoundedRectangle(thumbX + 2, trackY + 2,
+                                    std::max(1, thumbWidth - 4), thumbHeight,
+                                    thumbHeight / 2);
+        }
     }
 };
 
@@ -789,17 +1089,22 @@ DocumentView::DocumentView(wxWindow* parent)
     : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                        wxBORDER_NONE | wxVSCROLL),
       impl_(std::make_unique<Impl>()) {
+    impl_->owner = this;
     SetScrollRate(0, 1);
     SetBackgroundStyle(wxBG_STYLE_PAINT);
     Bind(wxEVT_PAINT, &DocumentView::OnPaint, this);
     Bind(wxEVT_SIZE, &DocumentView::OnSize, this);
     Bind(wxEVT_MOUSEWHEEL, &DocumentView::OnMouseWheel, this);
+    Bind(wxEVT_LEFT_DOWN, &DocumentView::OnLeftDown, this);
+    Bind(wxEVT_LEFT_UP, &DocumentView::OnLeftUp, this);
+    Bind(wxEVT_MOTION, &DocumentView::OnMouseMove, this);
     Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent&) {});
 }
 
 DocumentView::~DocumentView() = default;
 
 void DocumentView::ShowPlaceholder() {
+    impl_->tableDrag = nullptr;
     impl_->document.reset();
     impl_->messageTitle = U8("liteMark");
     impl_->messageBody = U8(
@@ -811,6 +1116,7 @@ void DocumentView::ShowPlaceholder() {
 }
 
 void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
+    impl_->tableDrag = nullptr;
     impl_->document.reset();
     impl_->messageTitle = title;
     impl_->messageBody = body;
@@ -821,6 +1127,7 @@ void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
 
 void DocumentView::SetDocument(
     std::shared_ptr<const MarkdownDocument> document, int scrollY) {
+    impl_->tableDrag = nullptr;
     impl_->document = std::move(document);
     impl_->messageTitle.clear();
     impl_->messageBody.clear();
@@ -862,6 +1169,7 @@ void DocumentView::ApplyTheme(const ThemePalette& palette) {
 }
 
 void DocumentView::OnSize(wxSizeEvent& event) {
+    impl_->tableDrag = nullptr;
     if (event.GetSize().x != impl_->layoutWidth) {
         impl_->layoutDirty = true;
     }
@@ -870,13 +1178,68 @@ void DocumentView::OnSize(wxSizeEvent& event) {
 }
 
 void DocumentView::OnMouseWheel(wxMouseEvent& event) {
+    const int wheelDelta =
+        event.GetWheelDelta() > 0 ? event.GetWheelDelta() : 120;
+    const double notches =
+        static_cast<double>(event.GetWheelRotation()) / wheelDelta;
+
+    if (event.ControlDown()) {
+        impl_->zoomWheelAccumulator += notches;
+        const int steps = static_cast<int>(impl_->zoomWheelAccumulator);
+        if (steps == 0) {
+            return;
+        }
+        impl_->zoomWheelAccumulator -= steps;
+
+        const double nextScale = std::clamp(
+            impl_->fontScale + steps * kFontZoomStep,
+            kMinFontScale, kMaxFontScale);
+        if (std::fabs(nextScale - impl_->fontScale) < 0.001) {
+            return;
+        }
+
+        int x = 0;
+        int y = 0;
+        GetViewStart(&x, &y);
+        impl_->pendingScrollY = y;
+        impl_->fontScale = nextScale;
+        impl_->fonts.clear();
+        impl_->layoutCache.clear();
+        impl_->layoutDirty = true;
+        impl_->layout.reset();
+        impl_->tableDrag = nullptr;
+        Refresh(false);
+        return;
+    }
+
+    int contentX = 0;
+    int contentY = 0;
+    CalcUnscrolledPosition(event.GetPosition().x, event.GetPosition().y,
+                           &contentX, &contentY);
+    BlockLayout* table = impl_->TableAt(wxPoint(contentX, contentY));
+    const bool overTableScrollbar =
+        table != nullptr && table->tableScrollbarHeight > 0 &&
+        contentY >= table->y + table->tableRowsHeight;
+    const bool horizontal =
+        event.GetWheelAxis() == wxMOUSE_WHEEL_HORIZONTAL ||
+        event.ShiftDown() || overTableScrollbar;
+
+    if (horizontal && table != nullptr &&
+        impl_->TableMaxScroll(*table) > 0) {
+        const int distance =
+            static_cast<int>(std::lround(FromDIP(110) * notches));
+        table->tableScrollX =
+            std::clamp(table->tableScrollX - distance, 0,
+                       impl_->TableMaxScroll(*table));
+        Refresh(false);
+        return;
+    }
+
     if (event.GetWheelAxis() != wxMOUSE_WHEEL_VERTICAL) {
         event.Skip();
         return;
     }
 
-    const int delta = event.GetWheelDelta() > 0 ? event.GetWheelDelta() : 120;
-    const double notches = static_cast<double>(event.GetWheelRotation()) / delta;
     const int pageHeight = GetClientSize().y;
     const int distance = static_cast<int>(
         std::lround(pageHeight * kMouseWheelPageFraction * notches));
@@ -888,6 +1251,72 @@ void DocumentView::OnMouseWheel(wxMouseEvent& event) {
         Scroll(0, std::max(0, y - distance));
         Refresh(false);
     }
+}
+
+void DocumentView::OnLeftDown(wxMouseEvent& event) {
+    int contentX = 0;
+    int contentY = 0;
+    CalcUnscrolledPosition(event.GetPosition().x, event.GetPosition().y,
+                           &contentX, &contentY);
+    BlockLayout* table = impl_->TableAt(wxPoint(contentX, contentY));
+    if (table != nullptr && table->tableScrollbarHeight > 0 &&
+        contentY >= table->y + table->tableRowsHeight) {
+        impl_->tableDrag = table;
+        impl_->SetTableScrollFromX(*table, contentX);
+        if (!HasCapture()) {
+            CaptureMouse();
+        }
+        Refresh(false);
+        return;
+    }
+
+    const wxString href = impl_->LinkAt(wxPoint(contentX, contentY));
+    if (!href.empty()) {
+        const ExternalLinkResult result = OpenExternalLink(href);
+        if (result == ExternalLinkResult::Failed) {
+            wxMessageBox(U8("无法调用系统默认应用打开该链接。"),
+                         U8("打开链接失败"), wxOK | wxICON_WARNING, this);
+        }
+        return;
+    }
+    event.Skip();
+}
+
+void DocumentView::OnMouseMove(wxMouseEvent& event) {
+    if (impl_->tableDrag != nullptr && event.LeftIsDown()) {
+        int contentX = 0;
+        int contentY = 0;
+        CalcUnscrolledPosition(event.GetPosition().x, event.GetPosition().y,
+                               &contentX, &contentY);
+        (void)contentY;
+        impl_->SetTableScrollFromX(*impl_->tableDrag, contentX);
+        Refresh(false);
+        return;
+    }
+
+    int contentX = 0;
+    int contentY = 0;
+    CalcUnscrolledPosition(event.GetPosition().x, event.GetPosition().y,
+                           &contentX, &contentY);
+    const wxString href = impl_->LinkAt(wxPoint(contentX, contentY));
+    if (href.empty()) {
+        SetCursor(wxCursor(wxCURSOR_ARROW));
+    } else {
+        SetCursor(wxCursor(wxCURSOR_HAND));
+    }
+    event.Skip();
+}
+
+void DocumentView::OnLeftUp(wxMouseEvent& event) {
+    if (impl_->tableDrag != nullptr) {
+        impl_->tableDrag = nullptr;
+        if (HasCapture()) {
+            ReleaseMouse();
+        }
+        Refresh(false);
+        return;
+    }
+    event.Skip();
 }
 
 void DocumentView::OnPaint(wxPaintEvent&) {
