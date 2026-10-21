@@ -1,5 +1,7 @@
 #include "session/TabManager.h"
 
+#include "core/parser/MarkdownParser.h"
+
 #include <wx/file.h>
 #include <wx/filename.h>
 
@@ -84,6 +86,14 @@ TabOpenResult TabManager::OpenFile(const wxString& path, wxString* error) {
     if (!ReadUtf8File(normalizedPath, &content, error)) {
         return TabOpenResult::Failed;
     }
+    const wxScopedCharBuffer utf8 = content.ToUTF8();
+    std::string parseError;
+    auto document = MarkdownParser::Parse(
+        std::string(utf8.data(), utf8.length()), &parseError);
+    if (!document) {
+        SetError(error, parseError.empty() ? "Markdown 解析失败" : parseError.c_str());
+        return TabOpenResult::Failed;
+    }
 
     wxFileName file(normalizedPath);
     TabSession session;
@@ -91,6 +101,7 @@ TabOpenResult TabManager::OpenFile(const wxString& path, wxString* error) {
     session.path = normalizedPath;
     session.title = file.GetFullName().empty() ? normalizedPath : file.GetFullName();
     session.content = std::move(content);
+    session.document = std::move(document);
     tabs_.push_back(std::move(session));
     selectedIndex_ = static_cast<int>(tabs_.size()) - 1;
     return TabOpenResult::Opened;
@@ -107,7 +118,16 @@ TabOpenResult TabManager::ReloadSelected(wxString* error) {
     if (!ReadUtf8File(current->path, &content, error)) {
         return TabOpenResult::Failed;
     }
+    const wxScopedCharBuffer utf8 = content.ToUTF8();
+    std::string parseError;
+    auto document = MarkdownParser::Parse(
+        std::string(utf8.data(), utf8.length()), &parseError);
+    if (!document) {
+        SetError(error, parseError.empty() ? "Markdown 解析失败" : parseError.c_str());
+        return TabOpenResult::Failed;
+    }
     current->content = std::move(content);
+    current->document = std::move(document);
     return TabOpenResult::Opened;
 }
 

@@ -1,8 +1,11 @@
 #pragma once
 
+#include "core/model/Block.h"
+
 #include <wx/string.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace litemark {
@@ -12,6 +15,7 @@ struct TabSession {
     wxString path;
     wxString title;
     wxString content;
+    std::shared_ptr<const MarkdownDocument> document;
     int scrollY = 0;
 };
 

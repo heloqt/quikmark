@@ -4,6 +4,7 @@
 #include "ui/ThemeController.h"
 
 #include <wx/image.h>
+#include <wx/timer.h>
 
 namespace litemark {
 
@@ -31,11 +32,13 @@ bool Application::OnInit() {
     }
 
     if (smokeTest) {
-        CallAfter([this]() {
+        auto* timer = new wxTimer(frame_);
+        frame_->Bind(wxEVT_TIMER, [this](wxTimerEvent&) {
             if (frame_ != nullptr) {
                 frame_->Close(true);
             }
         });
+        timer->StartOnce(500);
     }
     return true;
 }

@@ -1,65 +1,761 @@
 #include "ui/DocumentView.h"
 
+#include <wx/dc.h>
+#include <wx/dcbuffer.h>
+#include <wx/dcclient.h>
 #include <wx/font.h>
-#include <wx/sizer.h>
-#include <wx/textctrl.h>
+#include <wx/fontenum.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <map>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 namespace {
 
-wxString PlaceholderText() {
-    return wxString::FromUTF8(
-        "liteMark\n\n"
-        "这是一个只读 Markdown 阅读器骨架。\n"
-        "使用“文件 > 打开”或把 Markdown 文件拖入窗口。\n\n"
-        "当前版本先验证窗口、Tab、主题和 UTF-8 文件读取。");
+wxString U8(const char* text) {
+    return wxString::FromUTF8(text);
+}
+
+struct TextStyle {
+    int pointSize = 11;
+    bool bold = false;
+    bool italic = false;
+    bool mono = false;
+    bool underline = false;
+    bool strikethrough = false;
+    bool code = false;
+    bool image = false;
+    bool link = false;
+
+    auto key() const {
+        return std::tie(pointSize, bold, italic, mono, underline);
+    }
+};
+
+struct Segment {
+    wxString text;
+    TextStyle style;
+    int x = 0;
+    int width = 0;
+};
+
+struct Line {
+    std::vector<Segment> segments;
+    int y = 0;
+    int height = 0;
+    int width = 0;
+};
+
+struct TextLayout {
+    std::vector<Line> lines;
+    int height = 0;
+};
+
+struct CellLayout {
+    TextLayout text;
+    int x = 0;
+    int width = 0;
+};
+
+struct RowLayout {
+    std::vector<CellLayout> cells;
+    int y = 0;
+    int height = 0;
+};
+
+struct BlockLayout {
+    const litemark::Block* block = nullptr;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    TextLayout text;
+    std::vector<RowLayout> tableRows;
+    wxString marker;
+    int markerX = 0;
+    int markerY = 0;
+};
+
+struct ViewLayout {
+    std::vector<BlockLayout> blocks;
+    int height = 0;
+    int width = 0;
+};
+
+struct LayoutCacheEntry {
+    std::shared_ptr<const litemark::MarkdownDocument> document;
+    ViewLayout layout;
+};
+
+int LineHeight(wxDC& dc) {
+    return std::max(14, dc.GetCharHeight() + 2);
+}
+
+wxString ChooseFace(bool mono) {
+    if (mono) {
+        if (wxFontEnumerator::IsValidFacename("Cascadia Mono")) {
+            return "Cascadia Mono";
+        }
+        return "Consolas";
+    }
+    if (wxFontEnumerator::IsValidFacename("Microsoft YaHei UI")) {
+        return "Microsoft YaHei UI";
+    }
+    return "Segoe UI";
+}
+
+wxFont BuildFont(const TextStyle& style) {
+    wxFont font(wxFontInfo(style.pointSize).FaceName(ChooseFace(style.mono)));
+    if (style.bold) {
+        font.SetWeight(wxFONTWEIGHT_BOLD);
+    }
+    if (style.italic) {
+        font.SetStyle(wxFONTSTYLE_ITALIC);
+    }
+    if (style.underline) {
+        font.SetUnderlined(true);
+    }
+    return font;
+}
+
+TextStyle BaseStyle(const litemark::Block& block) {
+    TextStyle style;
+    switch (block.kind) {
+        case litemark::BlockKind::Heading:
+            style.bold = true;
+            style.pointSize = std::max(12, 25 - block.headingLevel * 2);
+            break;
+        case litemark::BlockKind::Code:
+        case litemark::BlockKind::Html:
+            style.pointSize = 10;
+            style.mono = true;
+            style.code = true;
+            break;
+        default:
+            style.pointSize = 11;
+            break;
+    }
+    return style;
+}
+
+int BreakPosition(const wxString& text, int fit) {
+    if (fit <= 0) {
+        return 0;
+    }
+    if (fit >= static_cast<int>(text.length())) {
+        return static_cast<int>(text.length());
+    }
+
+    const int lowerBound = std::max(1, fit / 3);
+    for (int i = fit - 1; i >= lowerBound; --i) {
+        if (text[i] == ' ' || text[i] == '\t') {
+            return i;
+        }
+    }
+    return fit;
+}
+
+using FontMap =
+    std::map<std::tuple<int, bool, bool, bool, bool>, wxFont>;
+
+void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
+                     const std::vector<litemark::InlineSpan>& spans,
+                     const TextStyle& baseStyle, FontMap* fonts) {
+    maxWidth = std::max(20, maxWidth);
+    auto fontFor = [&](const TextStyle& style) -> wxFont {
+        if (fonts == nullptr) {
+            return BuildFont(style);
+        }
+        auto result = fonts->try_emplace(style.key(), BuildFont(style));
+        return result.first->second;
+    };
+
+    auto ensureLine = [&]() -> Line& {
+        if (layout.lines.empty()) {
+            layout.lines.emplace_back();
+        }
+        return layout.lines.back();
+    };
+
+    auto newLine = [&]() {
+        if (layout.lines.empty()) {
+            layout.lines.emplace_back();
+            return;
+        }
+        Line& previous = layout.lines.back();
+        if (previous.segments.empty() && previous.width == 0) {
+            return;
+        }
+        Line line;
+        line.y = previous.y + previous.height + 3;
+        layout.lines.push_back(std::move(line));
+    };
+
+    auto refreshHeight = [&]() {
+        if (!layout.lines.empty()) {
+            const Line& last = layout.lines.back();
+            layout.height = last.y + last.height;
+        }
+    };
+
+    auto appendSegment = [&](const wxString& text, const TextStyle& style,
+                             int width) {
+        Line& line = ensureLine();
+        dc.SetFont(fontFor(style));
+        const int oldHeight = line.height;
+        line.height = std::max(line.height, LineHeight(dc));
+        if (!line.segments.empty()) {
+            Segment& last = line.segments.back();
+            const bool sameStyle =
+                last.style.key() == style.key() &&
+                last.style.code == style.code &&
+                last.style.image == style.image &&
+                last.style.link == style.link &&
+                last.style.strikethrough == style.strikethrough;
+            if (sameStyle) {
+                last.text += text;
+                last.width += width;
+                line.width += width;
+            } else {
+                line.segments.push_back({text, style, line.width, width});
+                line.width += width;
+            }
+        } else {
+            line.segments.push_back({text, style, 0, width});
+            line.width = width;
+        }
+        if (line.height < oldHeight) {
+            line.height = oldHeight;
+        }
+        refreshHeight();
+    };
+
+    for (const auto& sourceSpan : spans) {
+        wxString text = wxString::FromUTF8(sourceSpan.text);
+        if (sourceSpan.image) {
+            text = text.empty() ? U8("[图片]")
+                                : U8("[图片: ") + text + U8("]");
+        }
+        if (text.empty()) {
+            continue;
+        }
+
+        TextStyle style = baseStyle;
+        style.bold = style.bold || sourceSpan.bold;
+        style.italic = style.italic || sourceSpan.italic;
+        style.strikethrough =
+            style.strikethrough || sourceSpan.strikethrough;
+        style.code = style.code || sourceSpan.code;
+        style.mono = style.mono || sourceSpan.code;
+        style.image = sourceSpan.image;
+        style.link = !sourceSpan.image && !sourceSpan.href.empty();
+        style.underline = style.underline || style.link;
+
+        while (!text.empty()) {
+            const int newline = text.Find('\n');
+            wxString part = newline == wxNOT_FOUND ? text : text.Left(newline);
+            const bool hardBreak = newline != wxNOT_FOUND;
+            text = newline == wxNOT_FOUND ? wxString() : text.Mid(newline + 1);
+
+            while (!part.empty()) {
+                if (ensureLine().segments.empty() &&
+                    (part.StartsWith(" ") || part.StartsWith("\t"))) {
+                    part = part.Mid(1);
+                    continue;
+                }
+
+                dc.SetFont(fontFor(style));
+                Line& current = ensureLine();
+                current.height = std::max(current.height, LineHeight(dc));
+                refreshHeight();
+
+                const int available = maxWidth - current.width;
+                if (available <= 0) {
+                    newLine();
+                    continue;
+                }
+
+                wxArrayInt partial;
+                dc.GetPartialTextExtents(part, partial);
+                int fit = 0;
+                for (std::size_t i = 0; i < partial.size(); ++i) {
+                    if (partial[i] <= available) {
+                        fit = static_cast<int>(i) + 1;
+                    } else {
+                        break;
+                    }
+                }
+                if (fit == 0) {
+                    if (!current.segments.empty()) {
+                        newLine();
+                        continue;
+                    }
+                    fit = 1;
+                }
+
+                fit = BreakPosition(part, fit);
+                if (fit <= 0) {
+                    fit = 1;
+                }
+
+                wxString piece = part.Left(fit);
+                const int pieceWidth = dc.GetTextExtent(piece).x;
+                appendSegment(piece, style, pieceWidth);
+                part = part.Mid(fit);
+                if (!part.empty()) {
+                    newLine();
+                }
+            }
+
+            if (hardBreak) {
+                newLine();
+            }
+        }
+    }
+
+    if (layout.lines.empty()) {
+        layout.lines.emplace_back();
+        dc.SetFont(fontFor(baseStyle));
+        layout.lines.back().height = LineHeight(dc);
+    }
+    refreshHeight();
+}
+
+int IntrinsicBefore(const litemark::Block& block) {
+    if (block.kind == litemark::BlockKind::Heading) {
+        return block.headingLevel <= 2 ? 16 : 12;
+    }
+    if (block.kind == litemark::BlockKind::Code ||
+        block.kind == litemark::BlockKind::Table ||
+        block.kind == litemark::BlockKind::Rule) {
+        return 14;
+    }
+    return 8;
+}
+
+int IntrinsicAfter(const litemark::Block& block) {
+    if (block.kind == litemark::BlockKind::Heading) {
+        return 10;
+    }
+    if (block.kind == litemark::BlockKind::Code ||
+        block.kind == litemark::BlockKind::Table) {
+        return 14;
+    }
+    return 7;
 }
 
 }  // namespace
 
 namespace litemark {
 
-DocumentView::DocumentView(wxWindow* parent)
-    : wxPanel(parent, wxID_ANY) {
-    text_ = new wxTextCtrl(this, wxID_ANY, PlaceholderText(), wxDefaultPosition,
-                           wxDefaultSize,
-                           wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2 |
-                               wxTE_NOHIDESEL | wxBORDER_NONE);
+struct DocumentView::Impl {
+    std::shared_ptr<const MarkdownDocument> document;
+    ThemePalette palette;
+    ViewLayout layout;
+    bool layoutDirty = true;
+    int layoutWidth = 0;
+    int pendingScrollY = 0;
+    FontMap fonts;
+    std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
 
-    auto* sizer = new wxBoxSizer(wxVERTICAL);
-    sizer->Add(text_, 1, wxEXPAND);
-    SetSizer(sizer);
-
-    wxFont font(wxFontInfo(11).FaceName("Microsoft YaHei UI"));
-    if (font.IsOk()) {
-        text_->SetFont(font);
+    wxFont FontFor(const TextStyle& style) {
+        auto result = fonts.try_emplace(style.key(), BuildFont(style));
+        return result.first->second;
     }
-    text_->SetInsertionPoint(0);
+
+    void BuildDocumentLayout(wxDC& dc, int clientWidth) {
+        layout = {};
+        layout.width = clientWidth;
+        if (!document) {
+            return;
+        }
+
+        const double scale = static_cast<double>(dc.GetPPI().x) / 96.0;
+        const int pageMargin = static_cast<int>(std::lround(34 * scale));
+        const int maxContentWidth =
+            std::max(120, clientWidth - pageMargin * 2);
+        int y = pageMargin;
+
+        for (const Block& block : document->blocks) {
+            y += static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
+
+            const int quoteIndent =
+                static_cast<int>(std::lround(block.quoteDepth * 18 * scale));
+            const int listIndent =
+                block.listDepth > 0
+                    ? static_cast<int>(std::lround((block.listDepth - 1) * 22 * scale))
+                    : 0;
+            const int x = pageMargin + quoteIndent + listIndent;
+            const int width =
+                std::max(80, maxContentWidth - quoteIndent - listIndent);
+
+            BlockLayout item;
+            item.block = &block;
+            item.x = x;
+            item.y = y;
+            item.width = width;
+
+            if (block.kind == BlockKind::Rule) {
+                item.height = static_cast<int>(std::lround(18 * scale));
+            } else if (block.kind == BlockKind::Table) {
+                BuildTableLayout(dc, item, width, scale);
+            } else if (block.kind == BlockKind::Code ||
+                       block.kind == BlockKind::Html) {
+                TextStyle style = BaseStyle(block);
+                std::vector<InlineSpan> raw(1);
+                raw[0].text = block.raw;
+                const int padding = static_cast<int>(std::lround(10 * scale));
+                BuildTextLayout(dc, item.text, width - padding * 2, raw, style,
+                                &fonts);
+                item.height = item.text.height + padding * 2;
+            } else {
+                TextStyle style = BaseStyle(block);
+                const int markerWidth =
+                    block.listMarker ? static_cast<int>(std::lround(27 * scale)) : 0;
+                BuildTextLayout(dc, item.text, width - markerWidth, block.spans,
+                                style, &fonts);
+                item.height = item.text.height;
+                if (block.listMarker) {
+                    item.marker = BlockMarker(block);
+                    item.markerX =
+                        x - static_cast<int>(std::lround(26 * scale));
+                    item.markerY = y;
+                }
+            }
+
+            y += item.height;
+            y += static_cast<int>(std::lround(IntrinsicAfter(block) * scale));
+            layout.blocks.push_back(std::move(item));
+        }
+        layout.height = y + pageMargin;
+    }
+
+    static wxString BlockMarker(const Block& block) {
+        if (block.task) {
+            return block.taskChecked ? U8("☑") : U8("☐");
+        }
+        if (block.listOrdered) {
+            return wxString::Format("%d.", block.listIndex);
+        }
+        return U8("•");
+    }
+
+    void BuildTableLayout(wxDC& dc, BlockLayout& item, int width,
+                          double scale) {
+        const Block& block = *item.block;
+        const std::size_t rowCount = block.tableRows.size();
+        std::size_t columnCount = 0;
+        for (const auto& row : block.tableRows) {
+            columnCount = std::max(columnCount, row.size());
+        }
+        if (rowCount == 0 || columnCount == 0) {
+            item.height = 20;
+            return;
+        }
+
+        const int cellPadding =
+            static_cast<int>(std::lround(7 * scale));
+        const int columnWidth =
+            std::max(50, (width - static_cast<int>(columnCount) - 1) /
+                              static_cast<int>(columnCount));
+        int y = 0;
+
+        for (std::size_t r = 0; r < rowCount; ++r) {
+            RowLayout rowLayout;
+            rowLayout.y = y;
+            for (std::size_t c = 0; c < columnCount; ++c) {
+                CellLayout cell;
+                cell.x = static_cast<int>(c) * (columnWidth + 1) + 1;
+                cell.width = columnWidth;
+                TextStyle style;
+                style.pointSize = 10;
+                style.bold = r == 0;
+                if (c < block.tableRows[r].size()) {
+                    BuildTextLayout(dc, cell.text,
+                                    columnWidth - cellPadding * 2,
+                                    block.tableRows[r][c].spans, style, &fonts);
+                } else {
+                    cell.text.height = 0;
+                }
+                rowLayout.cells.push_back(std::move(cell));
+            }
+
+            int rowHeight = static_cast<int>(std::lround(20 * scale));
+            for (const auto& cell : rowLayout.cells) {
+                rowHeight =
+                    std::max(rowHeight, cell.text.height + cellPadding * 2);
+            }
+            rowLayout.height = rowHeight;
+            y += rowHeight + 1;
+            item.tableRows.push_back(std::move(rowLayout));
+        }
+        item.height = y + 1;
+    }
+
+    void DrawPlaceholder(wxDC& dc, int scrollX, int scrollY, int clientWidth) {
+        TextStyle titleStyle;
+        titleStyle.pointSize = 24;
+        titleStyle.bold = true;
+        TextStyle bodyStyle;
+        bodyStyle.pointSize = 11;
+
+        TextLayout title;
+        std::vector<InlineSpan> titleSpan(1);
+        titleSpan[0].text = "liteMark";
+        BuildTextLayout(dc, title, clientWidth - 80, titleSpan, titleStyle,
+                        &fonts);
+
+        TextLayout body;
+        std::vector<InlineSpan> bodySpans(1);
+        bodySpans[0].text =
+            "这是一个只读 Markdown 阅读器。\n"
+            "使用“文件 > 打开”或把 Markdown 文件拖入窗口。";
+        BuildTextLayout(dc, body, clientWidth - 80, bodySpans, bodyStyle,
+                        &fonts);
+
+        const int x = scrollX + 40;
+        int y = scrollY + 36;
+        DrawTextLayout(dc, title, x, y, false);
+        y += title.height + 18;
+        DrawTextLayout(dc, body, x, y, false);
+    }
+
+    void DrawTextLayout(wxDC& dc, const TextLayout& text, int baseX,
+                        int baseY, bool blockCode) {
+        for (const Line& line : text.lines) {
+            const int lineY = baseY + line.y;
+            for (const Segment& segment : line.segments) {
+                dc.SetFont(FontFor(segment.style));
+                const int segmentX = baseX + segment.x;
+                if (segment.style.code && !blockCode) {
+                    dc.SetPen(*wxTRANSPARENT_PEN);
+                    dc.SetBrush(wxBrush(palette.codeBackground));
+                    dc.DrawRectangle(segmentX - 2, lineY - 1,
+                                     segment.width + 4, line.height + 2);
+                }
+                if (segment.style.link) {
+                    dc.SetTextForeground(palette.link);
+                } else if (segment.style.image) {
+                    dc.SetTextForeground(palette.mutedText);
+                } else {
+                    dc.SetTextForeground(palette.text);
+                }
+                dc.DrawText(segment.text, segmentX, lineY);
+                if (segment.style.strikethrough) {
+                    dc.SetPen(wxPen(palette.mutedText, 1));
+                    const int strikeY = lineY + line.height / 2;
+                    dc.DrawLine(segmentX, strikeY,
+                                segmentX + segment.width, strikeY);
+                }
+            }
+        }
+    }
+
+    void DrawBlock(wxDC& dc, const BlockLayout& item) {
+        const Block& block = *item.block;
+
+        if (block.quoteDepth > 0) {
+            dc.SetPen(wxPen(palette.quoteBorder, 3));
+            dc.DrawLine(item.x - 13, item.y + 2, item.x - 13,
+                        item.y + item.height - 2);
+        }
+
+        switch (block.kind) {
+            case BlockKind::Rule:
+                dc.SetPen(wxPen(palette.border, 1));
+                dc.DrawLine(item.x, item.y + item.height / 2,
+                            item.x + item.width, item.y + item.height / 2);
+                break;
+            case BlockKind::Code:
+            case BlockKind::Html: {
+                dc.SetPen(wxPen(palette.border, 1));
+                dc.SetBrush(wxBrush(palette.codeBackground));
+                dc.DrawRectangle(item.x, item.y, item.width, item.height);
+                const int padding = std::max(6, item.height > 24 ? 10 : 6);
+                DrawTextLayout(dc, item.text, item.x + padding,
+                               item.y + padding, true);
+                break;
+            }
+            case BlockKind::Table:
+                DrawTable(dc, item);
+                break;
+            default:
+                if (!item.marker.empty()) {
+                    TextStyle markerStyle;
+                    markerStyle.pointSize = 11;
+                    markerStyle.bold = block.task;
+                    dc.SetFont(FontFor(markerStyle));
+                    dc.SetTextForeground(palette.mutedText);
+                    dc.DrawText(item.marker, item.markerX, item.markerY);
+                }
+                DrawTextLayout(dc, item.text, item.x, item.y, false);
+                if (block.kind == BlockKind::Heading &&
+                    block.headingLevel <= 2) {
+                    dc.SetPen(wxPen(palette.border, 1));
+                    dc.DrawLine(item.x, item.y + item.height + 3,
+                                item.x + item.width,
+                                item.y + item.height + 3);
+                }
+                break;
+        }
+    }
+
+    void DrawTable(wxDC& dc, const BlockLayout& item) {
+        if (item.tableRows.empty()) {
+            return;
+        }
+
+        dc.SetPen(wxPen(palette.border, 1));
+        dc.SetBrush(wxBrush(palette.documentBackground));
+        dc.DrawRectangle(item.x, item.y, item.width, item.height);
+
+        if (!item.tableRows.empty()) {
+            dc.SetBrush(wxBrush(palette.codeBackground));
+            dc.DrawRectangle(item.x + 1, item.y + 1, item.width - 1,
+                             item.tableRows.front().height);
+        }
+
+        for (const RowLayout& row : item.tableRows) {
+            for (const CellLayout& cell : row.cells) {
+                DrawTextLayout(dc, cell.text, item.x + cell.x + 7,
+                               item.y + row.y + 7, false);
+            }
+            dc.SetPen(wxPen(palette.border, 1));
+            dc.DrawLine(item.x, item.y + row.y, item.x + item.width,
+                        item.y + row.y);
+        }
+
+        for (const auto& row : item.tableRows) {
+            for (const auto& cell : row.cells) {
+                dc.SetPen(wxPen(palette.border, 1));
+                dc.DrawLine(item.x + cell.x, item.y + row.y,
+                            item.x + cell.x,
+                            item.y + row.y + row.height);
+            }
+        }
+        dc.DrawLine(item.x + item.width, item.y, item.x + item.width,
+                    item.y + item.height);
+        dc.DrawLine(item.x, item.y + item.height, item.x + item.width,
+                    item.y + item.height);
+    }
+};
+
+DocumentView::DocumentView(wxWindow* parent)
+    : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                       wxBORDER_NONE | wxVSCROLL),
+      impl_(std::make_unique<Impl>()) {
+    SetScrollRate(0, 1);
+    SetBackgroundStyle(wxBG_STYLE_PAINT);
+    Bind(wxEVT_PAINT, &DocumentView::OnPaint, this);
+    Bind(wxEVT_SIZE, &DocumentView::OnSize, this);
+    Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent&) {});
 }
+
+DocumentView::~DocumentView() = default;
 
 void DocumentView::ShowPlaceholder() {
-    text_->ChangeValue(PlaceholderText());
-    text_->SetInsertionPoint(0);
-    text_->ShowPosition(0);
+    impl_->document.reset();
+    impl_->layoutDirty = true;
+    impl_->pendingScrollY = 0;
+    Refresh();
 }
 
-void DocumentView::SetContent(const wxString& text, int scrollY) {
-    text_->ChangeValue(text);
-    text_->SetInsertionPoint(0);
-    text_->ShowPosition(0);
-    if (scrollY > 0) {
-        text_->ScrollLines(scrollY);
+void DocumentView::SetDocument(
+    std::shared_ptr<const MarkdownDocument> document, int scrollY) {
+    impl_->document = std::move(document);
+    const int width = GetClientSize().x;
+    const auto cached =
+        impl_->document ? impl_->layoutCache.find(impl_->document.get())
+                        : impl_->layoutCache.end();
+    if (cached != impl_->layoutCache.end() &&
+        cached->second.layout.width == width) {
+        impl_->layout = cached->second.layout;
+        impl_->layoutWidth = width;
+        impl_->layoutDirty = false;
+    } else {
+        impl_->layoutDirty = true;
+    }
+    impl_->pendingScrollY = std::max(0, scrollY);
+    Refresh();
+}
+
+void DocumentView::ForgetDocument(
+    const std::shared_ptr<const MarkdownDocument>& document) {
+    if (document) {
+        impl_->layoutCache.erase(document.get());
     }
 }
 
 int DocumentView::ScrollY() const {
-    return text_->GetScrollPos(wxVERTICAL);
+    int x = 0;
+    int y = 0;
+    const_cast<DocumentView*>(this)->GetViewStart(&x, &y);
+    return y;
 }
 
 void DocumentView::ApplyTheme(const ThemePalette& palette) {
+    impl_->palette = palette;
     SetBackgroundColour(palette.documentBackground);
-    text_->SetBackgroundColour(palette.documentBackground);
-    text_->SetForegroundColour(palette.text);
     Refresh();
+}
+
+void DocumentView::OnSize(wxSizeEvent& event) {
+    if (event.GetSize().x != impl_->layoutWidth) {
+        impl_->layoutDirty = true;
+    }
+    Refresh();
+    event.Skip();
+}
+
+void DocumentView::OnPaint(wxPaintEvent&) {
+    wxAutoBufferedPaintDC dc(this);
+    DoPrepareDC(dc);
+
+    int scrollX = 0;
+    int scrollY = 0;
+    GetViewStart(&scrollX, &scrollY);
+    const wxSize client = GetClientSize();
+
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(wxBrush(impl_->palette.documentBackground));
+    dc.DrawRectangle(scrollX, scrollY, client.x, client.y);
+
+    if (impl_->document == nullptr) {
+        SetVirtualSize(client);
+        impl_->DrawPlaceholder(dc, scrollX, scrollY, client.x);
+        return;
+    }
+
+    if (impl_->layoutDirty || impl_->layoutWidth != client.x) {
+        impl_->BuildDocumentLayout(dc, client.x);
+        impl_->layoutWidth = client.x;
+        impl_->layoutDirty = false;
+        if (impl_->document) {
+            impl_->layoutCache[impl_->document.get()] =
+                LayoutCacheEntry{impl_->document, impl_->layout};
+        }
+    }
+
+    SetVirtualSize(wxSize(client.x, std::max(client.y, impl_->layout.height)));
+    if (impl_->pendingScrollY > 0) {
+        const int target = impl_->pendingScrollY;
+        impl_->pendingScrollY = 0;
+        CallAfter([this, target]() { Scroll(0, target); });
+    }
+
+    const int viewBottom = scrollY + client.y;
+    for (const auto& blockLayout : impl_->layout.blocks) {
+        if (blockLayout.y + blockLayout.height < scrollY ||
+            blockLayout.y > viewBottom) {
+            continue;
+        }
+        impl_->DrawBlock(dc, blockLayout);
+    }
 }
 
 }  // namespace litemark

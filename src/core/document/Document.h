@@ -1,12 +1,12 @@
 #pragma once
 
+#include "core/model/Block.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace litemark {
-
-class Block;
 
 class Document {
 public:
@@ -17,7 +17,7 @@ public:
 private:
     Generation generation_ = 0;
     std::string source_;
-    std::vector<Block*> blocks_;
+    std::vector<Block> blocks_;
 };
 
 }  // namespace litemark

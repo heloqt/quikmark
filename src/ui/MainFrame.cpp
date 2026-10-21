@@ -157,7 +157,7 @@ void MainFrame::UpdateFromTabs() {
         documentView_->ShowPlaceholder();
         SetTitle(U8("liteMark"));
     } else {
-        documentView_->SetContent(current->content, current->scrollY);
+        documentView_->SetDocument(current->document, current->scrollY);
         SetTitle(current->title + U8(" - liteMark"));
     }
     Layout();
@@ -180,6 +180,9 @@ void MainFrame::ActivateTab(int index) {
 
 void MainFrame::CloseCurrentTab() {
     SaveCurrentScroll();
+    if (const TabSession* current = tabs_.selected()) {
+        documentView_->ForgetDocument(current->document);
+    }
     tabs_.CloseSelected();
     if (tabs_.tabs().empty()) {
         Close(true);
@@ -204,11 +207,14 @@ void MainFrame::OnOpen(wxCommandEvent&) {
 
 void MainFrame::OnReload(wxCommandEvent&) {
     SaveCurrentScroll();
+    const std::shared_ptr<const MarkdownDocument> oldDocument =
+        tabs_.selected() != nullptr ? tabs_.selected()->document : nullptr;
     wxString error;
     if (tabs_.ReloadSelected(&error) == TabOpenResult::Failed) {
         wxMessageBox(error, U8("重新加载失败"), wxOK | wxICON_ERROR, this);
         return;
     }
+    documentView_->ForgetDocument(oldDocument);
     UpdateFromTabs();
 }
 

@@ -1,24 +1,37 @@
 #pragma once
 
+#include "core/model/Block.h"
 #include "ui/ThemeController.h"
 
-#include <wx/panel.h>
+#include <wx/scrolwin.h>
 
-class wxTextCtrl;
+#include <memory>
+
+class wxPaintEvent;
+class wxSizeEvent;
 
 namespace litemark {
 
-class DocumentView : public wxPanel {
+class DocumentView : public wxScrolledWindow {
 public:
     explicit DocumentView(wxWindow* parent);
+    ~DocumentView() override;
 
     void ShowPlaceholder();
-    void SetContent(const wxString& text, int scrollY = 0);
+    void SetDocument(std::shared_ptr<const MarkdownDocument> document,
+                     int scrollY = 0);
+    void ForgetDocument(
+        const std::shared_ptr<const MarkdownDocument>& document);
     int ScrollY() const;
     void ApplyTheme(const ThemePalette& palette);
 
 private:
-    wxTextCtrl* text_ = nullptr;
+    struct Impl;
+
+    void OnPaint(wxPaintEvent& event);
+    void OnSize(wxSizeEvent& event);
+
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace litemark

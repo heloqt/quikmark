@@ -26,6 +26,7 @@ Do not mix binaries from `D:\msys64` and `D:\msys64-33`.
 | CMake | 4.4.4 |
 | Ninja | 1.13.2 |
 | wxWidgets | 3.3.4 |
+| md4c | 0.6.0 |
 | C++ standard | C++17 |
 | Target | x86_64-w64-mingw32 |
 
@@ -36,7 +37,8 @@ pacman -S --needed \
   mingw-w64-ucrt-x86_64-gcc \
   mingw-w64-ucrt-x86_64-cmake \
   mingw-w64-ucrt-x86_64-ninja \
-  mingw-w64-ucrt-x86_64-wxwidgets3.3-msw
+  mingw-w64-ucrt-x86_64-wxwidgets3.3-msw \
+  mingw-w64-ucrt-x86_64-md4c
 ```
 
 The package repositories are pinned in the isolated installation to the
