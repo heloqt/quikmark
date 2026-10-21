@@ -9,6 +9,7 @@
 
 class wxPaintEvent;
 class wxSizeEvent;
+class wxMouseEvent;
 
 namespace litemark {
 
@@ -31,6 +32,7 @@ private:
 
     void OnPaint(wxPaintEvent& event);
     void OnSize(wxSizeEvent& event);
+    void OnMouseWheel(wxMouseEvent& event);
 
     std::unique_ptr<Impl> impl_;
 };

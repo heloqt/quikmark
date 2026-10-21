@@ -26,7 +26,14 @@ if ($Clean -and (Test-Path -LiteralPath $buildDir)) {
 }
 
 cmake --preset $Preset
+if ($LASTEXITCODE -ne 0) {
+    throw "CMake configure failed for preset $Preset"
+}
+
 cmake --build --preset $Preset
+if ($LASTEXITCODE -ne 0) {
+    throw "Build failed for preset $Preset"
+}
 
 $exe = Join-Path $buildDir "bin\litemark.exe"
 if (-not (Test-Path -LiteralPath $exe)) {

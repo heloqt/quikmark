@@ -1,19 +1,27 @@
 #include "ui/MainFrame.h"
 
 #include "core/parser/MarkdownParser.h"
+#include "platform/windows/FileAssociation.h"
 #include "ui/DocumentView.h"
 #include "ui/TabStrip.h"
 
 #include <wx/dnd.h>
+#include <wx/button.h>
 #include <wx/event.h>
 #include <wx/filedlg.h>
 #include <wx/filename.h>
+#include <wx/fswatcher.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
+#include <wx/stattext.h>
+#include <wx/timer.h>
+#include <wx/utils.h>
 
 #include <atomic>
+#include <chrono>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,10 +64,30 @@ MainFrame::MainFrame(ThemeController& theme)
     CreateMenuBar();
 
     tabStrip_ = new TabStrip(this);
+    changeBanner_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
+                                FromDIP(wxSize(-1, 40)));
+    changeText_ = new wxStaticText(
+        changeBanner_, wxID_ANY, U8("文件已在外部修改"),
+        wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+    auto* reloadButton = new wxButton(
+        changeBanner_, ID_RELOAD, U8("重新加载"), wxDefaultPosition,
+        wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
+    auto* dismissButton = new wxButton(
+        changeBanner_, ID_DISMISS_CHANGE, U8("稍后"), wxDefaultPosition,
+        wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
+    auto* bannerSizer = new wxBoxSizer(wxHORIZONTAL);
+    bannerSizer->Add(changeText_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(14));
+    bannerSizer->Add(reloadButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+    bannerSizer->Add(dismissButton, 0,
+                     wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(8));
+    changeBanner_->SetSizer(bannerSizer);
+    changeBanner_->Hide();
+
     documentView_ = new DocumentView(this);
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(tabStrip_, 0, wxEXPAND);
+    sizer->Add(changeBanner_, 0, wxEXPAND);
     sizer->Add(documentView_, 1, wxEXPAND);
     SetSizer(sizer);
 
@@ -70,6 +98,9 @@ MainFrame::MainFrame(ThemeController& theme)
     tabStrip_->SetOnSelect([this](int index) { ActivateTab(index); });
     tabStrip_->SetOnClose([this](int index) { CloseTab(index); });
     theme_.SetOnChanged([this]() { ApplyTheme(); });
+
+    fileWatcher_.SetOwner(this);
+    changeTimer_.SetOwner(this, ID_CHANGE_TIMER);
 
     BindEvents();
     ApplyTheme();
@@ -96,6 +127,7 @@ void MainFrame::OpenPath(const wxString& path) {
     UpdateFromTabs();
     if (result == TabOpenResult::Opened) {
         if (const TabSession* current = tabs_.selected()) {
+            WatchFile(current->path);
             StartParse(*current);
         }
     }
@@ -112,6 +144,8 @@ void MainFrame::CreateMenuBar() {
     fileMenu->Append(wxID_OPEN, U8("打开...\tCtrl+O"));
     fileMenu->Append(ID_RELOAD, U8("重新加载\tCtrl+R"));
     fileMenu->Append(ID_CLOSE_TAB, U8("关闭当前 Tab\tCtrl+W"));
+    fileMenu->AppendSeparator();
+    fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION, U8("注册文件关联..."));
     fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, U8("退出"));
 
@@ -139,10 +173,20 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnOpen, this, wxID_OPEN);
     Bind(wxEVT_MENU, &MainFrame::OnReload, this, ID_RELOAD);
     Bind(wxEVT_MENU, &MainFrame::OnCloseTab, this, ID_CLOSE_TAB);
+    Bind(wxEVT_MENU, &MainFrame::OnRegisterFileAssociation, this,
+         ID_REGISTER_FILE_ASSOCIATION);
     Bind(wxEVT_MENU, &MainFrame::OnExit, this, wxID_EXIT);
     Bind(wxEVT_MENU, &MainFrame::OnAppearance, this, ID_APPEARANCE_SYSTEM,
          ID_APPEARANCE_DARK);
+    Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);
+    Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        tabs_.DismissChangeNotice();
+        UpdateChangeBanner();
+        Layout();
+    }, ID_DISMISS_CHANGE);
     Bind(wxEVT_SYS_COLOUR_CHANGED, &MainFrame::OnSystemColourChanged, this);
+    Bind(wxEVT_FSWATCHER, &MainFrame::OnFileChanged, this);
+    Bind(wxEVT_TIMER, &MainFrame::OnChangeTimer, this, ID_CHANGE_TIMER);
     Bind(wxEVT_THREAD, &MainFrame::OnParseCompleted, this, ID_PARSE_COMPLETED);
 }
 
@@ -151,6 +195,14 @@ void MainFrame::ApplyTheme() {
     SetBackgroundColour(palette.windowBackground);
     tabStrip_->ApplyTheme(palette);
     documentView_->ApplyTheme(palette);
+    if (changeBanner_ != nullptr) {
+        changeBanner_->SetBackgroundColour(palette.selection);
+        changeText_->SetForegroundColour(palette.text);
+        for (wxWindow* child : changeBanner_->GetChildren()) {
+            child->SetBackgroundColour(palette.selection);
+            child->SetForegroundColour(palette.text);
+        }
+    }
     UpdateAppearanceMenu();
     Refresh();
 }
@@ -182,6 +234,9 @@ void MainFrame::UpdateTabStrip() {
         } else if (tab.loadState == DocumentLoadState::Failed) {
             label += U8(" !");
         }
+        if (tab.externalChanged) {
+            label += U8(" ●");
+        }
         labels.push_back(label);
     }
     tabStrip_->SetTabs(labels, tabs_.selectedIndex());
@@ -208,13 +263,32 @@ void MainFrame::UpdateFromTabs() {
         }
         SetTitle(current->title + U8(" - liteMark"));
     }
+    UpdateChangeBanner();
     Layout();
+}
+
+void MainFrame::UpdateChangeBanner() {
+    if (changeBanner_ == nullptr) {
+        return;
+    }
+
+    const TabSession* current = tabs_.selected();
+    const bool show =
+        current != nullptr && current->externalChanged &&
+        !current->changeNoticeDismissed;
+    changeBanner_->Show(show);
+    if (show) {
+        changeText_->SetLabel(
+            current->title + U8(" 已在外部修改，是否重新加载？"));
+        changeBanner_->Layout();
+    }
 }
 
 void MainFrame::StartParse(const TabSession& tab) {
     const wxString path = tab.path;
     const std::uint64_t tabId = tab.id;
     const std::uint64_t generation = tab.generation;
+    parseStartTimes_[tab.id] = std::chrono::steady_clock::now();
 
     auto task = std::make_unique<ParseTask>();
     task->cancelled = std::make_shared<std::atomic_bool>(false);
@@ -270,9 +344,75 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     }
     if (current != nullptr && current->id == result.tabId) {
         UpdateFromTabs();
+        if (result.document) {
+            documentView_->Update();
+            const auto start = parseStartTimes_.find(result.tabId);
+            if (start != parseStartTimes_.end()) {
+                const auto elapsed = std::chrono::duration_cast<
+                    std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - start->second);
+                wxString perfLogPath;
+                if (wxGetEnv("LITEMARK_PERF_LOG", &perfLogPath) &&
+                    !perfLogPath.empty()) {
+                    const wxScopedCharBuffer utf8 = perfLogPath.ToUTF8();
+                    std::ofstream log(utf8.data(), std::ios::app);
+                    log << elapsed.count() / 1000.0 << '\n';
+                }
+            }
+        }
     } else {
         UpdateTabStrip();
     }
+    parseStartTimes_.erase(result.tabId);
+}
+
+void MainFrame::WatchFile(const wxString& path) {
+    wxFileName file(path);
+    file.MakeAbsolute();
+    file.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG);
+    const wxString directory = file.GetPath();
+    int& watches = watchedDirectories_[directory];
+    if (watches++ == 0) {
+        fileWatcher_.Add(
+            wxFileName::DirName(directory),
+            wxFSW_EVENT_CREATE | wxFSW_EVENT_DELETE | wxFSW_EVENT_RENAME |
+                wxFSW_EVENT_MODIFY);
+    }
+}
+
+void MainFrame::UnwatchFile(const wxString& path) {
+    wxFileName file(path);
+    file.MakeAbsolute();
+    file.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_LONG);
+    const wxString directory = file.GetPath();
+    const auto found = watchedDirectories_.find(directory);
+    if (found == watchedDirectories_.end()) {
+        return;
+    }
+    if (--found->second <= 0) {
+        fileWatcher_.Remove(wxFileName::DirName(directory));
+        watchedDirectories_.erase(found);
+    }
+}
+
+void MainFrame::OnFileChanged(wxFileSystemWatcherEvent& event) {
+    if ((event.GetChangeType() & (wxFSW_EVENT_ERROR | wxFSW_EVENT_WARNING)) != 0) {
+        event.Skip();
+        return;
+    }
+
+    const wxString path = event.GetPath().GetFullPath();
+    const wxString newPath = event.GetNewPath().GetFullPath();
+    if (tabs_.MarkExternalChange(path) ||
+        (!newPath.empty() && tabs_.MarkExternalChange(newPath))) {
+        changeTimer_.StartOnce(350);
+        UpdateTabStrip();
+    }
+    event.Skip();
+}
+
+void MainFrame::OnChangeTimer(wxTimerEvent&) {
+    UpdateFromTabs();
 }
 
 void MainFrame::SaveCurrentScroll() {
@@ -307,6 +447,7 @@ void MainFrame::CloseTab(int index) {
                 task->cancelled->store(true);
             }
         }
+        UnwatchFile(current->path);
         documentView_->ForgetDocument(current->document);
     }
     tabs_.CloseAt(static_cast<std::size_t>(index));
@@ -347,6 +488,8 @@ void MainFrame::OnReload(wxCommandEvent&) {
         return;
     }
     if (const TabSession* current = tabs_.selected()) {
+        UnwatchFile(current->path);
+        WatchFile(current->path);
         StartParse(*current);
     }
     UpdateFromTabs();
@@ -354,6 +497,24 @@ void MainFrame::OnReload(wxCommandEvent&) {
 
 void MainFrame::OnCloseTab(wxCommandEvent&) {
     CloseCurrentTab();
+}
+
+void MainFrame::OnRegisterFileAssociation(wxCommandEvent&) {
+    const int answer = wxMessageBox(
+        U8("将 liteMark 注册为 .md 和 .markdown 文件的打开方式？\n"
+           "该操作只修改当前 Windows 用户的文件关联。"),
+        U8("注册文件关联"), wxYES_NO | wxICON_QUESTION, this);
+    if (answer != wxYES) {
+        return;
+    }
+
+    wxString error;
+    if (!RegisterLiteMarkFileAssociations(&error)) {
+        wxMessageBox(error, U8("注册失败"), wxOK | wxICON_ERROR, this);
+        return;
+    }
+    wxMessageBox(U8("文件关联注册完成。"), U8("liteMark"),
+                 wxOK | wxICON_INFORMATION, this);
 }
 
 void MainFrame::OnExit(wxCommandEvent&) {

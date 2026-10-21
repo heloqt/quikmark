@@ -41,6 +41,9 @@ add_executable(litemark WIN32
     src/app/litemark.rc
     src/app/main.cpp
     src/core/parser/MarkdownParser.cpp
+    src/platform/windows/FileAssociation.cpp
+    src/platform/windows/IpcServer.cpp
+    src/platform/windows/SingletonGuard.cpp
     src/session/TabManager.cpp
     src/ui/DocumentView.cpp
     src/ui/MainFrame.cpp

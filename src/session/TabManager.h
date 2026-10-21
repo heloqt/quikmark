@@ -26,6 +26,8 @@ struct TabSession {
     std::shared_ptr<const MarkdownDocument> document;
     DocumentLoadState loadState = DocumentLoadState::Loading;
     wxString parseError;
+    bool externalChanged = false;
+    bool changeNoticeDismissed = false;
     int scrollY = 0;
 };
 
@@ -43,6 +45,8 @@ public:
                        const wxString& content,
                        std::shared_ptr<const MarkdownDocument> document,
                        const wxString& error);
+    bool MarkExternalChange(const wxString& path);
+    void DismissChangeNotice();
 
     static bool LoadFileAndParse(
         const wxString& path,

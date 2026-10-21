@@ -17,6 +17,8 @@
 
 namespace {
 
+constexpr double kMouseWheelPageFraction = 0.45;
+
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
 }
@@ -791,6 +793,7 @@ DocumentView::DocumentView(wxWindow* parent)
     SetBackgroundStyle(wxBG_STYLE_PAINT);
     Bind(wxEVT_PAINT, &DocumentView::OnPaint, this);
     Bind(wxEVT_SIZE, &DocumentView::OnSize, this);
+    Bind(wxEVT_MOUSEWHEEL, &DocumentView::OnMouseWheel, this);
     Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent&) {});
 }
 
@@ -864,6 +867,27 @@ void DocumentView::OnSize(wxSizeEvent& event) {
     }
     Refresh();
     event.Skip();
+}
+
+void DocumentView::OnMouseWheel(wxMouseEvent& event) {
+    if (event.GetWheelAxis() != wxMOUSE_WHEEL_VERTICAL) {
+        event.Skip();
+        return;
+    }
+
+    const int delta = event.GetWheelDelta() > 0 ? event.GetWheelDelta() : 120;
+    const double notches = static_cast<double>(event.GetWheelRotation()) / delta;
+    const int pageHeight = GetClientSize().y;
+    const int distance = static_cast<int>(
+        std::lround(pageHeight * kMouseWheelPageFraction * notches));
+
+    if (distance != 0) {
+        int x = 0;
+        int y = 0;
+        GetViewStart(&x, &y);
+        Scroll(0, std::max(0, y - distance));
+        Refresh(false);
+    }
 }
 
 void DocumentView::OnPaint(wxPaintEvent&) {

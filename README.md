@@ -14,6 +14,9 @@ liteMark 是一个原生、轻量、只读的 Markdown 阅读器，目标是不�
 - 首次打开立即建立 Tab，文件读取和 Markdown 解析在后台线程执行。
 - 只对可视区和一屏预取内容做精确排版，其余块使用估算高度。
 - 每份文档的布局缓存，Tab 切换时复用已完成的块布局。
+- 单实例窗口和命名管道文件转发。
+- 文件变化目录监听、Tab 标记和非模态重新加载提示。
+- Windows 安装器及 `.md`/`.markdown` 文件关联。
 
 需求与设计文档位于 [`doc/`](doc/)。
 
@@ -47,6 +50,14 @@ Debug 版本依赖 `D:\msys64-33\ucrt64\bin` 中的 wxWidgets DLL，请使用
 `run.ps1` 启动。Release 静态版本可以独立启动。
 
 命令行可以直接传入 Markdown 路径；`--smoke-test` 用于无交互启动检查。
+
+## 打包
+
+```powershell
+.\scripts\package.ps1 -Version 0.1.0
+```
+
+安装器输出到 `dist\`，打包脚本会拒绝超过 10 MB 的制品。
 
 ## 测试
 

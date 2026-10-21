@@ -34,5 +34,6 @@
 # Build outputs and local toolchain state
 /build/
 /build-*/
+/dist/
 /.cache/
 /CMakeUserPresets.json

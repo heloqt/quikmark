@@ -105,6 +105,7 @@ TabOpenResult TabManager::ReloadSelected(wxString* error) {
     ++current->generation;
     current->loadState = DocumentLoadState::Loading;
     current->parseError.clear();
+    current->changeNoticeDismissed = true;
     return TabOpenResult::Opened;
 }
 
@@ -122,13 +123,34 @@ bool TabManager::CompleteParse(
         session->document = std::move(document);
         session->loadState = DocumentLoadState::Ready;
         session->parseError.clear();
+        session->externalChanged = false;
+        session->changeNoticeDismissed = false;
     } else {
         session->parseError = error;
         session->loadState =
             session->document ? DocumentLoadState::Ready
                               : DocumentLoadState::Failed;
+        session->changeNoticeDismissed = false;
     }
     return true;
+}
+
+bool TabManager::MarkExternalChange(const wxString& path) {
+    const wxString normalized = NormalizePath(path);
+    for (auto& tab : tabs_) {
+        if (tab.path.CmpNoCase(normalized) == 0) {
+            tab.externalChanged = true;
+            tab.changeNoticeDismissed = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+void TabManager::DismissChangeNotice() {
+    if (TabSession* session = selectedMutable()) {
+        session->changeNoticeDismissed = true;
+    }
 }
 
 bool TabManager::LoadFileAndParse(
