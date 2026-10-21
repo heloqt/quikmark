@@ -3,6 +3,7 @@
 #include <md4c.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 #include <string>
@@ -104,10 +105,13 @@ std::string DecodeEntity(std::string entity) {
 
 class Parser {
 public:
-    explicit Parser(MarkdownDocument& document)
-        : document_(document) {}
+    Parser(MarkdownDocument& document, const std::atomic_bool* cancelled)
+        : document_(document), cancelled_(cancelled) {}
 
     int EnterBlock(MD_BLOCKTYPE type, void* detail) {
+        if (Cancelled()) {
+            return 1;
+        }
         switch (type) {
             case MD_BLOCK_QUOTE:
                 ++quoteDepth_;
@@ -187,6 +191,9 @@ public:
     }
 
     int LeaveBlock(MD_BLOCKTYPE type) {
+        if (Cancelled()) {
+            return 1;
+        }
         switch (type) {
             case MD_BLOCK_QUOTE:
                 quoteDepth_ = std::max(0, quoteDepth_ - 1);
@@ -224,6 +231,9 @@ public:
     }
 
     int EnterSpan(MD_SPANTYPE type, void* detail) {
+        if (Cancelled()) {
+            return 1;
+        }
         SpanStyle style;
         if (!spanStack_.empty()) {
             style = spanStack_.back();
@@ -264,6 +274,9 @@ public:
     }
 
     int LeaveSpan(MD_SPANTYPE) {
+        if (Cancelled()) {
+            return 1;
+        }
         if (!spanStack_.empty()) {
             spanStack_.pop_back();
         }
@@ -271,6 +284,9 @@ public:
     }
 
     int Text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size) {
+        if (Cancelled()) {
+            return 1;
+        }
         if (text == nullptr || size == 0) {
             return 0;
         }
@@ -312,6 +328,10 @@ public:
     }
 
 private:
+    bool Cancelled() const {
+        return cancelled_ != nullptr && cancelled_->load(std::memory_order_relaxed);
+    }
+
     void CaptureListContext(Block* block, bool consumeMarker) {
         block->quoteDepth = quoteDepth_;
         if (!items_.empty()) {
@@ -390,6 +410,7 @@ private:
     }
 
     MarkdownDocument& document_;
+    const std::atomic_bool* cancelled_ = nullptr;
     std::vector<Block> blocks_;
     std::vector<ListLevel> lists_;
     std::vector<ListItem> items_;
@@ -429,9 +450,10 @@ namespace litemark {
 
 std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
     const std::string& utf8,
-    std::string* error) {
+    std::string* error,
+    const std::atomic_bool* cancelled) {
     auto document = std::make_shared<MarkdownDocument>();
-    Parser parser(*document);
+    Parser parser(*document, cancelled);
 
     MD_PARSER mdParser{};
     mdParser.flags = MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH |
@@ -446,7 +468,9 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
                                 &mdParser, &parser);
     if (result != 0) {
         if (error != nullptr) {
-            *error = "Markdown parsing failed";
+            *error = cancelled != nullptr && cancelled->load()
+                         ? "Markdown parsing cancelled"
+                         : "Markdown parsing failed";
         }
         return nullptr;
     }

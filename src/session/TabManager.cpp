@@ -74,7 +74,7 @@ void SetError(wxString* error, const char* message) {
 
 namespace litemark {
 
-TabOpenResult TabManager::OpenFile(const wxString& path, wxString* error) {
+TabOpenResult TabManager::OpenFile(const wxString& path) {
     const wxString normalizedPath = NormalizePath(path);
     const int existing = FindPath(normalizedPath);
     if (existing >= 0) {
@@ -82,26 +82,13 @@ TabOpenResult TabManager::OpenFile(const wxString& path, wxString* error) {
         return TabOpenResult::Activated;
     }
 
-    wxString content;
-    if (!ReadUtf8File(normalizedPath, &content, error)) {
-        return TabOpenResult::Failed;
-    }
-    const wxScopedCharBuffer utf8 = content.ToUTF8();
-    std::string parseError;
-    auto document = MarkdownParser::Parse(
-        std::string(utf8.data(), utf8.length()), &parseError);
-    if (!document) {
-        SetError(error, parseError.empty() ? "Markdown 解析失败" : parseError.c_str());
-        return TabOpenResult::Failed;
-    }
-
     wxFileName file(normalizedPath);
     TabSession session;
     session.id = nextId_++;
+    session.generation = 1;
     session.path = normalizedPath;
     session.title = file.GetFullName().empty() ? normalizedPath : file.GetFullName();
-    session.content = std::move(content);
-    session.document = std::move(document);
+    session.loadState = DocumentLoadState::Loading;
     tabs_.push_back(std::move(session));
     selectedIndex_ = static_cast<int>(tabs_.size()) - 1;
     return TabOpenResult::Opened;
@@ -114,21 +101,64 @@ TabOpenResult TabManager::ReloadSelected(wxString* error) {
         return TabOpenResult::Failed;
     }
 
-    wxString content;
-    if (!ReadUtf8File(current->path, &content, error)) {
-        return TabOpenResult::Failed;
-    }
-    const wxScopedCharBuffer utf8 = content.ToUTF8();
-    std::string parseError;
-    auto document = MarkdownParser::Parse(
-        std::string(utf8.data(), utf8.length()), &parseError);
-    if (!document) {
-        SetError(error, parseError.empty() ? "Markdown 解析失败" : parseError.c_str());
-        return TabOpenResult::Failed;
-    }
-    current->content = std::move(content);
-    current->document = std::move(document);
+    ++current->generation;
+    current->loadState = DocumentLoadState::Loading;
+    current->parseError.clear();
     return TabOpenResult::Opened;
+}
+
+bool TabManager::CompleteParse(
+    std::uint64_t tabId, std::uint64_t generation,
+    const wxString& content,
+    std::shared_ptr<const MarkdownDocument> document, const wxString& error) {
+    TabSession* session = FindById(tabId, generation);
+    if (session == nullptr) {
+        return false;
+    }
+
+    if (document) {
+        session->content = content;
+        session->document = std::move(document);
+        session->loadState = DocumentLoadState::Ready;
+        session->parseError.clear();
+    } else {
+        session->parseError = error;
+        session->loadState =
+            session->document ? DocumentLoadState::Ready
+                              : DocumentLoadState::Failed;
+    }
+    return true;
+}
+
+bool TabManager::LoadFileAndParse(
+    const wxString& path, const std::atomic_bool* cancelled,
+    wxString* content, std::shared_ptr<const MarkdownDocument>* document,
+    wxString* error) {
+    if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
+        SetError(error, "加载已取消");
+        return false;
+    }
+    if (!ReadUtf8File(path, content, error)) {
+        return false;
+    }
+    if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
+        SetError(error, "加载已取消");
+        return false;
+    }
+
+    const wxScopedCharBuffer utf8 = content->ToUTF8();
+    std::string parseError;
+    auto parsed = MarkdownParser::Parse(
+        std::string(utf8.data(), utf8.length()), &parseError, cancelled);
+    if (!parsed) {
+        if (error != nullptr) {
+            *error = wxString::FromUTF8(parseError.c_str());
+        }
+        return false;
+    }
+
+    *document = std::move(parsed);
+    return true;
 }
 
 void TabManager::Activate(std::size_t index) {
@@ -227,6 +257,16 @@ int TabManager::FindPath(const wxString& normalizedPath) const {
         }
     }
     return -1;
+}
+
+TabSession* TabManager::FindById(std::uint64_t tabId,
+                                 std::uint64_t generation) {
+    for (auto& tab : tabs_) {
+        if (tab.id == tabId && tab.generation == generation) {
+            return &tab;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace litemark

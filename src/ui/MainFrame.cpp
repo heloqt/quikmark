@@ -1,5 +1,6 @@
 #include "ui/MainFrame.h"
 
+#include "core/parser/MarkdownParser.h"
 #include "ui/DocumentView.h"
 #include "ui/TabStrip.h"
 
@@ -11,6 +12,10 @@
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
 
+#include <atomic>
+#include <exception>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace {
@@ -18,6 +23,14 @@ namespace {
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
 }
+
+struct ParseCompletion {
+    std::uint64_t tabId = 0;
+    std::uint64_t generation = 0;
+    wxString content;
+    std::shared_ptr<const litemark::MarkdownDocument> document;
+    wxString error;
+};
 
 class MainFrameDropTarget : public wxFileDropTarget {
 public:
@@ -63,15 +76,28 @@ MainFrame::MainFrame(ThemeController& theme)
     Centre();
 }
 
+MainFrame::~MainFrame() {
+    for (auto& task : parseTasks_) {
+        if (task->cancelled) {
+            task->cancelled->store(true);
+        }
+    }
+    for (auto& task : parseTasks_) {
+        if (task->thread.joinable()) {
+            task->thread.join();
+        }
+    }
+}
+
 void MainFrame::OpenPath(const wxString& path) {
     SaveCurrentScroll();
-    wxString error;
-    const auto result = tabs_.OpenFile(path, &error);
-    if (result == TabOpenResult::Failed) {
-        wxMessageBox(error, U8("打开失败"), wxOK | wxICON_ERROR, this);
-        return;
-    }
+    const auto result = tabs_.OpenFile(path);
     UpdateFromTabs();
+    if (result == TabOpenResult::Opened) {
+        if (const TabSession* current = tabs_.selected()) {
+            StartParse(*current);
+        }
+    }
 }
 
 void MainFrame::OpenPaths(const wxArrayString& paths) {
@@ -116,6 +142,7 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnAppearance, this, ID_APPEARANCE_SYSTEM,
          ID_APPEARANCE_DARK);
     Bind(wxEVT_SYS_COLOUR_CHANGED, &MainFrame::OnSystemColourChanged, this);
+    Bind(wxEVT_THREAD, &MainFrame::OnParseCompleted, this, ID_PARSE_COMPLETED);
 }
 
 void MainFrame::ApplyTheme() {
@@ -144,23 +171,107 @@ void MainFrame::UpdateAppearanceMenu() {
     }
 }
 
-void MainFrame::UpdateFromTabs() {
+void MainFrame::UpdateTabStrip() {
     std::vector<wxString> labels;
     labels.reserve(tabs_.tabs().size());
     for (const auto& tab : tabs_.tabs()) {
-        labels.push_back(tab.title);
+        wxString label = tab.title;
+        if (tab.loadState == DocumentLoadState::Loading) {
+            label += U8(" …");
+        } else if (tab.loadState == DocumentLoadState::Failed) {
+            label += U8(" !");
+        }
+        labels.push_back(label);
     }
     tabStrip_->SetTabs(labels, tabs_.selectedIndex());
+}
 
+void MainFrame::UpdateFromTabs() {
+    UpdateTabStrip();
     const TabSession* current = tabs_.selected();
     if (current == nullptr) {
         documentView_->ShowPlaceholder();
         SetTitle(U8("liteMark"));
     } else {
-        documentView_->SetDocument(current->document, current->scrollY);
+        if (current->document) {
+            documentView_->SetDocument(current->document, current->scrollY);
+        } else if (current->loadState == DocumentLoadState::Failed) {
+            documentView_->ShowMessage(
+                U8("无法显示文档"),
+                current->parseError.empty() ? U8("Markdown 解析失败")
+                                            : current->parseError);
+        } else {
+            documentView_->ShowMessage(
+                U8("正在解析"),
+                current->title + U8("\n\nMarkdown 文档正在后台解析。"));
+        }
         SetTitle(current->title + U8(" - liteMark"));
     }
     Layout();
+}
+
+void MainFrame::StartParse(const TabSession& tab) {
+    const wxString path = tab.path;
+    const std::uint64_t tabId = tab.id;
+    const std::uint64_t generation = tab.generation;
+
+    auto task = std::make_unique<ParseTask>();
+    task->cancelled = std::make_shared<std::atomic_bool>(false);
+    task->tabId = tab.id;
+    task->generation = tab.generation;
+    const auto cancelled = task->cancelled;
+    ParseTask* rawTask = task.get();
+    parseTasks_.push_back(std::move(task));
+
+    rawTask->thread = std::thread(
+        [this, path, cancelled, tabId, generation]() {
+            wxString error;
+            wxString content;
+            std::shared_ptr<const MarkdownDocument> document;
+            try {
+                TabManager::LoadFileAndParse(path, cancelled.get(), &content,
+                                             &document, &error);
+            } catch (const std::exception& exception) {
+                error = wxString::FromUTF8(exception.what());
+            } catch (...) {
+                error = U8("未知的 Markdown 解析错误");
+            }
+
+            if (cancelled->load(std::memory_order_relaxed)) {
+                return;
+            }
+
+            auto* event =
+                new wxThreadEvent(wxEVT_THREAD, ID_PARSE_COMPLETED);
+            event->SetPayload(ParseCompletion{
+                tabId,
+                generation,
+                std::move(content),
+                std::move(document),
+                std::move(error),
+            });
+            wxQueueEvent(this, event);
+        });
+}
+
+void MainFrame::OnParseCompleted(wxThreadEvent& event) {
+    const ParseCompletion result = event.GetPayload<ParseCompletion>();
+    if (!tabs_.CompleteParse(result.tabId, result.generation,
+                             result.content, result.document, result.error)) {
+        return;
+    }
+
+    const TabSession* current = tabs_.selected();
+    if (!result.document && current != nullptr && current->document &&
+        !result.error.empty()) {
+        wxMessageBox(result.error, U8("Markdown 解析失败"),
+                     wxOK | wxICON_WARNING, this);
+    }
+    if (current != nullptr && current->id == result.tabId) {
+        UpdateFromTabs();
+    } else {
+        UpdateTabStrip();
+    }
 }
 
 void MainFrame::SaveCurrentScroll() {
@@ -180,7 +291,14 @@ void MainFrame::ActivateTab(int index) {
 
 void MainFrame::CloseCurrentTab() {
     SaveCurrentScroll();
-    if (const TabSession* current = tabs_.selected()) {
+    const TabSession* current = tabs_.selected();
+    if (current != nullptr) {
+        const std::uint64_t closingId = current->id;
+        for (auto& task : parseTasks_) {
+            if (task->tabId == closingId && task->cancelled) {
+                task->cancelled->store(true);
+            }
+        }
         documentView_->ForgetDocument(current->document);
     }
     tabs_.CloseSelected();
@@ -207,14 +325,22 @@ void MainFrame::OnOpen(wxCommandEvent&) {
 
 void MainFrame::OnReload(wxCommandEvent&) {
     SaveCurrentScroll();
-    const std::shared_ptr<const MarkdownDocument> oldDocument =
-        tabs_.selected() != nullptr ? tabs_.selected()->document : nullptr;
+    const TabSession* previous = tabs_.selected();
+    if (previous != nullptr) {
+        for (auto& task : parseTasks_) {
+            if (task->tabId == previous->id && task->cancelled) {
+                task->cancelled->store(true);
+            }
+        }
+    }
     wxString error;
     if (tabs_.ReloadSelected(&error) == TabOpenResult::Failed) {
         wxMessageBox(error, U8("重新加载失败"), wxOK | wxICON_ERROR, this);
         return;
     }
-    documentView_->ForgetDocument(oldDocument);
+    if (const TabSession* current = tabs_.selected()) {
+        StartParse(*current);
+    }
     UpdateFromTabs();
 }
 

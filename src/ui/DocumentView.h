@@ -18,6 +18,7 @@ public:
     ~DocumentView() override;
 
     void ShowPlaceholder();
+    void ShowMessage(const wxString& title, const wxString& body);
     void SetDocument(std::shared_ptr<const MarkdownDocument> document,
                      int scrollY = 0);
     void ForgetDocument(

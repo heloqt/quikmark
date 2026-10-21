@@ -21,6 +21,16 @@ wxString U8(const char* text) {
     return wxString::FromUTF8(text);
 }
 
+std::size_t CountUtf8Characters(const std::string& text) {
+    std::size_t count = 0;
+    for (unsigned char value : text) {
+        if ((value & 0xC0U) != 0x80U) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 struct TextStyle {
     int pointSize = 11;
     bool bold = false;
@@ -81,15 +91,20 @@ struct BlockLayout {
     int markerY = 0;
 };
 
+struct BlockSlot {
+    int estimatedHeight = 0;
+    int actualHeight = -1;
+};
+
 struct ViewLayout {
-    std::vector<BlockLayout> blocks;
-    int height = 0;
+    std::vector<BlockSlot> slots;
+    std::map<std::size_t, BlockLayout> blockLayouts;
     int width = 0;
 };
 
 struct LayoutCacheEntry {
     std::shared_ptr<const litemark::MarkdownDocument> document;
-    ViewLayout layout;
+    std::shared_ptr<ViewLayout> layout;
 };
 
 int LineHeight(wxDC& dc) {
@@ -356,83 +371,208 @@ namespace litemark {
 struct DocumentView::Impl {
     std::shared_ptr<const MarkdownDocument> document;
     ThemePalette palette;
-    ViewLayout layout;
+    std::shared_ptr<ViewLayout> layout;
     bool layoutDirty = true;
     int layoutWidth = 0;
     int pendingScrollY = 0;
     FontMap fonts;
     std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
+    wxString messageTitle = U8("liteMark");
+    wxString messageBody = U8(
+        "这是一个只读 Markdown 阅读器。\n"
+        "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
 
     wxFont FontFor(const TextStyle& style) {
         auto result = fonts.try_emplace(style.key(), BuildFont(style));
         return result.first->second;
     }
 
-    void BuildDocumentLayout(wxDC& dc, int clientWidth) {
-        layout = {};
-        layout.width = clientWidth;
+    double Scale(wxDC& dc) const {
+        return static_cast<double>(dc.GetPPI().x) / 96.0;
+    }
+
+    int PageMargin(wxDC& dc) const {
+        return static_cast<int>(std::lround(34 * Scale(dc)));
+    }
+
+    int EstimateHeight(wxDC& dc, const Block& block, int width) const {
+        const double scale = Scale(dc);
+        const int before =
+            static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
+        const int after =
+            static_cast<int>(std::lround(IntrinsicAfter(block) * scale));
+
+        if (block.kind == BlockKind::Rule) {
+            return before + static_cast<int>(std::lround(18 * scale)) + after;
+        }
+        if (block.kind == BlockKind::Table) {
+            const int rows = std::max(1, static_cast<int>(block.tableRows.size()));
+            return before + rows * static_cast<int>(std::lround(30 * scale)) +
+                   after;
+        }
+
+        std::size_t characters = 0;
+        std::size_t newlines = 0;
+        if (block.kind == BlockKind::Code || block.kind == BlockKind::Html) {
+            characters = CountUtf8Characters(block.raw);
+            newlines = static_cast<std::size_t>(
+                std::count(block.raw.begin(), block.raw.end(), '\n'));
+        } else {
+            for (const auto& span : block.spans) {
+                characters += CountUtf8Characters(span.text);
+                newlines += static_cast<std::size_t>(
+                    std::count(span.text.begin(), span.text.end(), '\n'));
+            }
+        }
+
+        const int averageAdvance =
+            std::max(6, static_cast<int>(std::lround(9 * scale)));
+        const int charsPerLine = std::max(8, width / averageAdvance);
+        const int wrappedLines =
+            std::max<std::size_t>(1, (characters + charsPerLine - 1) / charsPerLine);
+        const int lines = static_cast<int>(wrappedLines + newlines);
+
+        int lineHeight = 22;
+        if (block.kind == BlockKind::Heading) {
+            lineHeight = std::max(24, 30 - block.headingLevel * 2);
+        } else if (block.kind == BlockKind::Code ||
+                   block.kind == BlockKind::Html) {
+            lineHeight = 19;
+        }
+        const int body =
+            static_cast<int>(std::lround((lines * lineHeight + 12) * scale));
+        return before + body + after;
+    }
+
+    void InitializeLayout(wxDC& dc, int clientWidth) {
+        layout = std::make_shared<ViewLayout>();
+        layout->width = clientWidth;
+        layoutWidth = clientWidth;
+        layoutDirty = false;
         if (!document) {
             return;
         }
 
-        const double scale = static_cast<double>(dc.GetPPI().x) / 96.0;
+        const int pageMargin = PageMargin(dc);
+        const int maxContentWidth =
+            std::max(120, clientWidth - pageMargin * 2);
+        layout->slots.reserve(document->blocks.size());
+        for (const Block& block : document->blocks) {
+            const int quoteIndent = static_cast<int>(
+                std::lround(block.quoteDepth * 18 * Scale(dc)));
+            const int listIndent =
+                block.listDepth > 0
+                    ? static_cast<int>(std::lround(
+                          (block.listDepth - 1) * 22 * Scale(dc)))
+                    : 0;
+            const int width =
+                std::max(80, maxContentWidth - quoteIndent - listIndent);
+            layout->slots.push_back(
+                BlockSlot{EstimateHeight(dc, block, width), -1});
+        }
+
+        if (document) {
+            layoutCache[document.get()] =
+                LayoutCacheEntry{document, layout};
+        }
+    }
+
+    int SlotHeight(const BlockSlot& slot) const {
+        return slot.actualHeight >= 0 ? slot.actualHeight
+                                      : slot.estimatedHeight;
+    }
+
+    int TotalHeight() const {
+        if (!layout) {
+            return 0;
+        }
+        int total = 0;
+        for (const auto& slot : layout->slots) {
+            total += SlotHeight(slot);
+        }
+        return total;
+    }
+
+    BlockLayout BuildBlockLayout(wxDC& dc, std::size_t index, int y,
+                                 int clientWidth) {
+        const Block& block = document->blocks[index];
+        const double scale = Scale(dc);
         const int pageMargin = static_cast<int>(std::lround(34 * scale));
         const int maxContentWidth =
             std::max(120, clientWidth - pageMargin * 2);
-        int y = pageMargin;
+        const int quoteIndent =
+            static_cast<int>(std::lround(block.quoteDepth * 18 * scale));
+        const int listIndent =
+            block.listDepth > 0
+                ? static_cast<int>(
+                      std::lround((block.listDepth - 1) * 22 * scale))
+                : 0;
+        const int x = pageMargin + quoteIndent + listIndent;
+        const int width =
+            std::max(80, maxContentWidth - quoteIndent - listIndent);
+        const int before =
+            static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
+        const int after =
+            static_cast<int>(std::lround(IntrinsicAfter(block) * scale));
 
-        for (const Block& block : document->blocks) {
-            y += static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
+        BlockLayout item;
+        item.block = &block;
+        item.x = x;
+        item.y = y + before;
+        item.width = width;
 
-            const int quoteIndent =
-                static_cast<int>(std::lround(block.quoteDepth * 18 * scale));
-            const int listIndent =
-                block.listDepth > 0
-                    ? static_cast<int>(std::lround((block.listDepth - 1) * 22 * scale))
+        if (block.kind == BlockKind::Rule) {
+            item.height = static_cast<int>(std::lround(18 * scale));
+        } else if (block.kind == BlockKind::Table) {
+            BuildTableLayout(dc, item, width, scale);
+        } else if (block.kind == BlockKind::Code ||
+                   block.kind == BlockKind::Html) {
+            TextStyle style = BaseStyle(block);
+            std::vector<InlineSpan> raw(1);
+            raw[0].text = block.raw;
+            const int padding = static_cast<int>(std::lround(10 * scale));
+            BuildTextLayout(dc, item.text, width - padding * 2, raw, style,
+                            &fonts);
+            item.height = item.text.height + padding * 2;
+        } else {
+            TextStyle style = BaseStyle(block);
+            const int markerWidth =
+                block.listMarker
+                    ? static_cast<int>(std::lround(27 * scale))
                     : 0;
-            const int x = pageMargin + quoteIndent + listIndent;
-            const int width =
-                std::max(80, maxContentWidth - quoteIndent - listIndent);
-
-            BlockLayout item;
-            item.block = &block;
-            item.x = x;
-            item.y = y;
-            item.width = width;
-
-            if (block.kind == BlockKind::Rule) {
-                item.height = static_cast<int>(std::lround(18 * scale));
-            } else if (block.kind == BlockKind::Table) {
-                BuildTableLayout(dc, item, width, scale);
-            } else if (block.kind == BlockKind::Code ||
-                       block.kind == BlockKind::Html) {
-                TextStyle style = BaseStyle(block);
-                std::vector<InlineSpan> raw(1);
-                raw[0].text = block.raw;
-                const int padding = static_cast<int>(std::lround(10 * scale));
-                BuildTextLayout(dc, item.text, width - padding * 2, raw, style,
-                                &fonts);
-                item.height = item.text.height + padding * 2;
-            } else {
-                TextStyle style = BaseStyle(block);
-                const int markerWidth =
-                    block.listMarker ? static_cast<int>(std::lround(27 * scale)) : 0;
-                BuildTextLayout(dc, item.text, width - markerWidth, block.spans,
-                                style, &fonts);
-                item.height = item.text.height;
-                if (block.listMarker) {
-                    item.marker = BlockMarker(block);
-                    item.markerX =
-                        x - static_cast<int>(std::lround(26 * scale));
-                    item.markerY = y;
-                }
+            BuildTextLayout(dc, item.text, width - markerWidth, block.spans,
+                            style, &fonts);
+            item.height = item.text.height;
+            if (block.listMarker) {
+                item.marker = BlockMarker(block);
+                item.markerX =
+                    x - static_cast<int>(std::lround(26 * scale));
+                item.markerY = item.y;
             }
-
-            y += item.height;
-            y += static_cast<int>(std::lround(IntrinsicAfter(block) * scale));
-            layout.blocks.push_back(std::move(item));
         }
-        layout.height = y + pageMargin;
+
+        const int actualHeight = before + item.height + after;
+        BlockSlot& slot = layout->slots[index];
+        slot.actualHeight = std::max(1, actualHeight);
+        return item;
+    }
+
+    BlockLayout& LayoutFor(wxDC& dc, std::size_t index, int y,
+                           int clientWidth) {
+        auto found = layout->blockLayouts.find(index);
+        const int before = static_cast<int>(
+            std::lround(IntrinsicBefore(document->blocks[index]) * Scale(dc)));
+        if (found == layout->blockLayouts.end()) {
+            return layout->blockLayouts
+                .emplace(index,
+                         BuildBlockLayout(dc, index, y, clientWidth))
+                .first->second;
+        }
+        found->second.y = y + before;
+        if (found->second.block->listMarker) {
+            found->second.markerY = found->second.y;
+        }
+        return found->second;
     }
 
     static wxString BlockMarker(const Block& block) {
@@ -506,15 +646,13 @@ struct DocumentView::Impl {
 
         TextLayout title;
         std::vector<InlineSpan> titleSpan(1);
-        titleSpan[0].text = "liteMark";
+        titleSpan[0].text = messageTitle.ToUTF8().data();
         BuildTextLayout(dc, title, clientWidth - 80, titleSpan, titleStyle,
                         &fonts);
 
         TextLayout body;
         std::vector<InlineSpan> bodySpans(1);
-        bodySpans[0].text =
-            "这是一个只读 Markdown 阅读器。\n"
-            "使用“文件 > 打开”或把 Markdown 文件拖入窗口。";
+        bodySpans[0].text = messageBody.ToUTF8().data();
         BuildTextLayout(dc, body, clientWidth - 80, bodySpans, bodyStyle,
                         &fonts);
 
@@ -660,6 +798,19 @@ DocumentView::~DocumentView() = default;
 
 void DocumentView::ShowPlaceholder() {
     impl_->document.reset();
+    impl_->messageTitle = U8("liteMark");
+    impl_->messageBody = U8(
+        "这是一个只读 Markdown 阅读器。\n"
+        "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
+    impl_->layoutDirty = true;
+    impl_->pendingScrollY = 0;
+    Refresh();
+}
+
+void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
+    impl_->document.reset();
+    impl_->messageTitle = title;
+    impl_->messageBody = body;
     impl_->layoutDirty = true;
     impl_->pendingScrollY = 0;
     Refresh();
@@ -668,12 +819,15 @@ void DocumentView::ShowPlaceholder() {
 void DocumentView::SetDocument(
     std::shared_ptr<const MarkdownDocument> document, int scrollY) {
     impl_->document = std::move(document);
+    impl_->messageTitle.clear();
+    impl_->messageBody.clear();
     const int width = GetClientSize().x;
     const auto cached =
         impl_->document ? impl_->layoutCache.find(impl_->document.get())
                         : impl_->layoutCache.end();
     if (cached != impl_->layoutCache.end() &&
-        cached->second.layout.width == width) {
+        cached->second.layout &&
+        cached->second.layout->width == width) {
         impl_->layout = cached->second.layout;
         impl_->layoutWidth = width;
         impl_->layoutDirty = false;
@@ -731,30 +885,42 @@ void DocumentView::OnPaint(wxPaintEvent&) {
         return;
     }
 
-    if (impl_->layoutDirty || impl_->layoutWidth != client.x) {
-        impl_->BuildDocumentLayout(dc, client.x);
-        impl_->layoutWidth = client.x;
-        impl_->layoutDirty = false;
-        if (impl_->document) {
-            impl_->layoutCache[impl_->document.get()] =
-                LayoutCacheEntry{impl_->document, impl_->layout};
-        }
+    if (!impl_->layout || impl_->layoutDirty ||
+        impl_->layoutWidth != client.x) {
+        impl_->InitializeLayout(dc, client.x);
     }
 
-    SetVirtualSize(wxSize(client.x, std::max(client.y, impl_->layout.height)));
+    const int pageMargin = impl_->PageMargin(dc);
+    const int viewBottom = scrollY + client.y;
+    const int layoutStart = std::max(0, scrollY - client.y);
+    const int layoutEnd = viewBottom + client.y;
+    int y = pageMargin;
+
+    for (std::size_t i = 0; i < impl_->layout->slots.size(); ++i) {
+        const int height = impl_->SlotHeight(impl_->layout->slots[i]);
+        if (y + height < layoutStart) {
+            y += height;
+            continue;
+        }
+        if (y > layoutEnd) {
+            break;
+        }
+
+        const BlockLayout& blockLayout =
+            impl_->LayoutFor(dc, i, y, client.x);
+        if (blockLayout.y + blockLayout.height >= scrollY &&
+            blockLayout.y <= viewBottom) {
+            impl_->DrawBlock(dc, blockLayout);
+        }
+        y += impl_->SlotHeight(impl_->layout->slots[i]);
+    }
+
+    const int totalHeight = impl_->TotalHeight() + pageMargin * 2;
+    SetVirtualSize(wxSize(client.x, std::max(client.y, totalHeight)));
     if (impl_->pendingScrollY > 0) {
         const int target = impl_->pendingScrollY;
         impl_->pendingScrollY = 0;
         CallAfter([this, target]() { Scroll(0, target); });
-    }
-
-    const int viewBottom = scrollY + client.y;
-    for (const auto& blockLayout : impl_->layout.blocks) {
-        if (blockLayout.y + blockLayout.height < scrollY ||
-            blockLayout.y > viewBottom) {
-            continue;
-        }
-        impl_->DrawBlock(dc, blockLayout);
     }
 }
 
