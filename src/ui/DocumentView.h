@@ -39,6 +39,7 @@ private:
     void OnLeftUp(wxMouseEvent& event);
     void OnMouseMove(wxMouseEvent& event);
     void OnImageLoaded(wxThreadEvent& event);
+    void OnFlowchartLoaded(wxThreadEvent& event);
 
     std::unique_ptr<Impl> impl_;
 };

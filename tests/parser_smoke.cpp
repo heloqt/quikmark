@@ -1,3 +1,4 @@
+#include "core/flow/Flowchart.h"
 #include "core/parser/MarkdownParser.h"
 
 #include <cstdlib>
@@ -64,7 +65,11 @@ int main() {
         "| --- | --- |\n"
         "| A | 1 |\n"
         "| B | 2 |\n\n"
-        "![diagram](diagram.png)\n";
+        "![diagram](diagram.png)\n\n"
+        "```mermaid\n"
+        "flowchart TD\n"
+        "A[Start] --> B[End]\n"
+        "```\n";
 
     std::string error;
     auto document = litemark::MarkdownParser::Parse(markdown, &error);
@@ -79,6 +84,9 @@ int main() {
     }
     if (!HasKind(*document, litemark::BlockKind::Table)) {
         return Fail("missing table block");
+    }
+    if (!HasKind(*document, litemark::BlockKind::Flowchart)) {
+        return Fail("missing flowchart block");
     }
     if (!HasBoldText(*document)) {
         return Fail("missing bold inline span");
@@ -100,7 +108,33 @@ int main() {
         return Fail("missing quote depth");
     }
 
+    const auto flowchart = litemark::ParseMermaidFlowchart(
+        "flowchart TD\n"
+        "  A[Start] --> B{Ready?}\n"
+        "  B -->|Yes| C[Work]\n"
+        "  B -->|No| D((Stop))\n"
+        "  subgraph group [Work group]\n"
+        "  C --> E[Finish]\n"
+        "  end\n");
+    if (!flowchart.ok) {
+        return Fail(flowchart.error.c_str());
+    }
+    if (flowchart.graph.nodes.size() != 5 ||
+        flowchart.graph.edges.size() != 4 ||
+        flowchart.graph.clusters.size() != 1 ||
+        flowchart.graph.direction != litemark::FlowDirection::TopDown) {
+        return Fail("flowchart graph mismatch");
+    }
+    const auto unsupportedFlowchart = litemark::ParseMermaidFlowchart(
+        "flowchart TD\n"
+        "  A --> B\n"
+        "  style A fill:#fff\n");
+    if (unsupportedFlowchart.ok) {
+        return Fail("unsupported flowchart syntax was accepted");
+    }
+
     std::cout << "parser_smoke: " << document->blocks.size()
-              << " blocks parsed\n";
+              << " blocks and " << flowchart.graph.nodes.size()
+              << " flowchart nodes parsed\n";
     return EXIT_SUCCESS;
 }

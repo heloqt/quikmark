@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
 #include <cstdlib>
 #include <string>
@@ -500,6 +501,23 @@ void NormalizeImages(MarkdownDocument& document) {
     document.blocks = std::move(normalized);
 }
 
+void NormalizeFlowcharts(MarkdownDocument& document) {
+    for (auto& block : document.blocks) {
+        if (block.kind != BlockKind::Code) {
+            continue;
+        }
+        std::string language = block.language;
+        std::transform(language.begin(), language.end(), language.begin(),
+                       [](unsigned char ch) {
+                           return static_cast<char>(std::tolower(ch));
+                       });
+        if (language == "mermaid") {
+            block.kind = BlockKind::Flowchart;
+            block.flowSource = block.raw;
+        }
+    }
+}
+
 }  // namespace
 
 namespace litemark {
@@ -532,6 +550,7 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
     }
 
     NormalizeImages(*document);
+    NormalizeFlowcharts(*document);
     return document;
 }
 

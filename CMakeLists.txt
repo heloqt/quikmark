@@ -40,6 +40,7 @@ add_executable(litemark WIN32
     src/app/Application.cpp
     src/app/litemark.rc
     src/app/main.cpp
+    src/core/flow/Flowchart.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/windows/FileAssociation.cpp
     src/platform/windows/ImageDownloader.cpp
@@ -91,6 +92,7 @@ if(LITEMARK_BUILD_TESTS)
     enable_testing()
     add_executable(litemark_parser_tests
         tests/parser_smoke.cpp
+        src/core/flow/Flowchart.cpp
         src/core/parser/MarkdownParser.cpp
     )
     target_include_directories(litemark_parser_tests PRIVATE src ${MD4C_INCLUDE_DIR})

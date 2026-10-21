@@ -15,6 +15,7 @@ enum class BlockKind {
     Html,
     Table,
     Image,
+    Flowchart,
     Rule
 };
 
@@ -53,6 +54,7 @@ struct Block {
     std::string language;
     std::string imagePath;
     std::string imageAlt;
+    std::string flowSource;
     std::vector<std::vector<TableCell>> tableRows;
 };
 
