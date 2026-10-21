@@ -29,6 +29,10 @@ bool HasBoldText(const litemark::MarkdownDocument& document) {
 
 bool HasImage(const litemark::MarkdownDocument& document) {
     for (const auto& block : document.blocks) {
+        if (block.kind == litemark::BlockKind::Image &&
+            block.imagePath.find("diagram.png") != std::string::npos) {
+            return true;
+        }
         for (const auto& span : block.spans) {
             if (span.image) {
                 return true;

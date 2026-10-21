@@ -250,7 +250,8 @@ void MainFrame::UpdateFromTabs() {
         SetTitle(U8("liteMark"));
     } else {
         if (current->document) {
-            documentView_->SetDocument(current->document, current->scrollY);
+            documentView_->SetDocument(current->document, current->path,
+                                       current->scrollY);
         } else if (current->loadState == DocumentLoadState::Failed) {
             documentView_->ShowMessage(
                 U8("无法显示文档"),

@@ -14,6 +14,7 @@ enum class BlockKind {
     Code,
     Html,
     Table,
+    Image,
     Rule
 };
 
@@ -50,6 +51,8 @@ struct Block {
     std::vector<InlineSpan> spans;
     std::string raw;
     std::string language;
+    std::string imagePath;
+    std::string imageAlt;
     std::vector<std::vector<TableCell>> tableRows;
 };
 

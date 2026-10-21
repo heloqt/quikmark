@@ -10,6 +10,7 @@
 class wxPaintEvent;
 class wxSizeEvent;
 class wxMouseEvent;
+class wxThreadEvent;
 
 namespace litemark {
 
@@ -21,6 +22,7 @@ public:
     void ShowPlaceholder();
     void ShowMessage(const wxString& title, const wxString& body);
     void SetDocument(std::shared_ptr<const MarkdownDocument> document,
+                     const wxString& basePath,
                      int scrollY = 0);
     void ForgetDocument(
         const std::shared_ptr<const MarkdownDocument>& document);
@@ -36,6 +38,7 @@ private:
     void OnLeftDown(wxMouseEvent& event);
     void OnLeftUp(wxMouseEvent& event);
     void OnMouseMove(wxMouseEvent& event);
+    void OnImageLoaded(wxThreadEvent& event);
 
     std::unique_ptr<Impl> impl_;
 };

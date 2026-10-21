@@ -1,21 +1,32 @@
 #include "ui/DocumentView.h"
 
+#include "platform/windows/ImageDownloader.h"
+
 #include <wx/app.h>
+#include <wx/bitmap.h>
 #include <wx/cursor.h>
 #include <wx/dc.h>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
+#include <wx/event.h>
+#include <wx/filename.h>
 #include <wx/font.h>
 #include <wx/fontenum.h>
+#include <wx/image.h>
 #include <wx/msgdlg.h>
+#include <wx/mstream.h>
 #include <wx/utils.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <numeric>
+#include <set>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -26,6 +37,7 @@ constexpr double kMouseWheelPageFraction = 0.45;
 constexpr double kFontZoomStep = 0.10;
 constexpr double kMinFontScale = 0.75;
 constexpr double kMaxFontScale = 2.00;
+constexpr int kImageLoadedEventId = wxID_HIGHEST + 501;
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
@@ -101,9 +113,17 @@ struct BlockLayout {
     int tableRowsHeight = 0;
     int tableScrollX = 0;
     int tableScrollbarHeight = 0;
+    wxBitmap imageBitmap;
+    wxBitmap placeholderBitmap;
+    wxString placeholderText;
     wxString marker;
     int markerX = 0;
     int markerY = 0;
+};
+
+struct ImageLoadedPayload {
+    wxString key;
+    std::shared_ptr<wxImage> image;
 };
 
 struct BlockSlot {
@@ -419,8 +439,22 @@ ExternalLinkResult OpenExternalLink(const wxString& href) {
 namespace litemark {
 
 struct DocumentView::Impl {
+    struct ImageTask {
+        std::thread thread;
+        std::shared_ptr<std::atomic_bool> cancelled;
+    };
+
+    struct ResolvedImageSource {
+        wxString key;
+        wxString localPath;
+        wxString url;
+        bool remote = false;
+        bool valid = false;
+    };
+
     DocumentView* owner = nullptr;
     std::shared_ptr<const MarkdownDocument> document;
+    wxString basePath;
     ThemePalette palette;
     std::shared_ptr<ViewLayout> layout;
     bool layoutDirty = true;
@@ -430,11 +464,28 @@ struct DocumentView::Impl {
     double zoomWheelAccumulator = 0.0;
     FontMap fonts;
     std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
+    std::map<wxString, std::shared_ptr<wxImage>> images;
+    std::set<wxString> requestedImages;
+    std::set<wxString> failedImages;
+    std::vector<std::unique_ptr<ImageTask>> imageTasks;
     wxString messageTitle = U8("liteMark");
     wxString messageBody = U8(
         "这是一个只读 Markdown 阅读器。\n"
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
     BlockLayout* tableDrag = nullptr;
+
+    ~Impl() {
+        for (auto& task : imageTasks) {
+            if (task->cancelled) {
+                task->cancelled->store(true, std::memory_order_relaxed);
+            }
+        }
+        for (auto& task : imageTasks) {
+            if (task->thread.joinable()) {
+                task->thread.join();
+            }
+        }
+    }
 
     static int TableMaxScroll(const BlockLayout& item) {
         return std::max(0, item.tableContentWidth - item.width);
@@ -545,6 +596,170 @@ struct DocumentView::Impl {
         return result.first->second;
     }
 
+    ResolvedImageSource ResolveImageSource(
+        const std::string& source) const {
+        ResolvedImageSource resolved;
+        if (source.empty()) {
+            return resolved;
+        }
+        const wxString text = wxString::FromUTF8(source);
+        const wxString lower = text.Lower();
+        if (lower.StartsWith("http://") || lower.StartsWith("https://")) {
+            resolved.key = text;
+            resolved.url = text;
+            resolved.remote = true;
+            resolved.valid = true;
+            return resolved;
+        }
+        if (lower.Contains("://") || lower.StartsWith("data:") ||
+            lower.StartsWith("file:") || lower.StartsWith("ftp:")) {
+            return resolved;
+        }
+        if (basePath.empty()) {
+            return resolved;
+        }
+
+        wxFileName imagePath(text);
+        if (imagePath.IsRelative()) {
+            const wxFileName documentPath(basePath);
+            imagePath.MakeAbsolute(documentPath.GetPath());
+        }
+        imagePath.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE |
+                            wxPATH_NORM_LONG);
+        if (!imagePath.FileExists()) {
+            return resolved;
+        }
+        resolved.key = imagePath.GetFullPath();
+        resolved.localPath = resolved.key;
+        resolved.valid = true;
+        return resolved;
+    }
+
+    void RequestImage(const ResolvedImageSource& source) {
+        if (images.find(source.key) != images.end() ||
+            failedImages.find(source.key) != failedImages.end() ||
+            requestedImages.find(source.key) != requestedImages.end()) {
+            return;
+        }
+
+        if (!source.remote) {
+            wxFileName fileName(source.localPath);
+            const wxString extension = fileName.GetExt().Lower();
+            if (extension != "png" && extension != "jpg" &&
+                extension != "jpeg" && extension != "bmp" &&
+                extension != "gif") {
+                failedImages.insert(source.key);
+                return;
+            }
+            if (fileName.GetSize() > 64LL * 1024 * 1024) {
+                failedImages.insert(source.key);
+                return;
+            }
+        }
+
+        requestedImages.insert(source.key);
+        auto task = std::make_unique<ImageTask>();
+        task->cancelled = std::make_shared<std::atomic_bool>(false);
+        const auto cancelled = task->cancelled;
+        ImageTask* rawTask = task.get();
+        imageTasks.push_back(std::move(task));
+
+        rawTask->thread = std::thread(
+            [this, owner = owner, source, cancelled]() {
+            auto image = std::make_shared<wxImage>();
+            bool loaded = false;
+            if (source.remote) {
+                std::vector<std::uint8_t> bytes;
+                wxString downloadError;
+                if (DownloadImageUrl(source.url, &bytes, &downloadError)) {
+                    wxMemoryInputStream stream(bytes.data(), bytes.size());
+                    loaded = image->LoadFile(stream);
+                }
+            } else {
+                loaded = image->LoadFile(source.localPath);
+            }
+            if (loaded) {
+                const long long pixels =
+                    static_cast<long long>(image->GetWidth()) *
+                    image->GetHeight();
+                loaded = image->IsOk() && pixels > 0 && pixels <= 64000000LL;
+            }
+            if (cancelled->load(std::memory_order_relaxed)) {
+                return;
+            }
+
+            auto* event =
+                new wxThreadEvent(wxEVT_THREAD, kImageLoadedEventId);
+            event->SetPayload(ImageLoadedPayload{
+                source.key,
+                loaded ? std::move(image) : nullptr,
+            });
+            wxQueueEvent(owner, event);
+        });
+    }
+
+    void BuildImageLayout(wxDC& dc, BlockLayout& item, int width,
+                          double scale) {
+        (void)dc;
+        const Block& block = *item.block;
+        item.marker = block.listMarker ? BlockMarker(block) : wxString();
+        if (block.listMarker) {
+            item.markerX =
+                item.x - static_cast<int>(std::lround(26 * scale));
+            item.markerY = item.y;
+        }
+
+        const ResolvedImageSource source =
+            ResolveImageSource(block.imagePath);
+        if (!source.valid) {
+            item.placeholderText =
+                U8("图片不可用\n") +
+                (block.imageAlt.empty() ? wxString::FromUTF8(block.imagePath)
+                                        : wxString::FromUTF8(block.imageAlt));
+            item.height = static_cast<int>(std::lround(120 * scale));
+            return;
+        }
+
+        const auto found = images.find(source.key);
+        if (found == images.end() || !found->second || !found->second->IsOk()) {
+            RequestImage(source);
+            item.placeholderText =
+                failedImages.find(source.key) != failedImages.end()
+                    ? U8("图片加载失败\n") +
+                          (block.imageAlt.empty()
+                               ? wxString::FromUTF8(block.imagePath)
+                               : wxString::FromUTF8(block.imageAlt))
+                    : U8("正在加载图片…");
+            item.height = static_cast<int>(std::lround(120 * scale));
+            return;
+        }
+
+        const wxImage& image = *found->second;
+        int targetWidth = std::min(width, image.GetWidth());
+        int targetHeight =
+            std::max(1, static_cast<int>(std::lround(
+                            static_cast<double>(image.GetHeight()) *
+                            targetWidth / image.GetWidth())));
+        const int maxHeight = static_cast<int>(std::lround(1600 * scale));
+        if (targetHeight > maxHeight) {
+            targetHeight = maxHeight;
+            targetWidth = std::max(
+                1, static_cast<int>(std::lround(
+                       static_cast<double>(image.GetWidth()) * targetHeight /
+                       image.GetHeight())));
+        }
+
+        wxImage scaled = image;
+        if (scaled.GetWidth() != targetWidth ||
+            scaled.GetHeight() != targetHeight) {
+            scaled = scaled.Scale(targetWidth, targetHeight,
+                                  wxIMAGE_QUALITY_HIGH);
+        }
+        item.imageBitmap = wxBitmap(scaled);
+        item.width = targetWidth;
+        item.height = targetHeight;
+    }
+
     double Scale(wxDC& dc) const {
         return static_cast<double>(dc.GetPPI().x) / 96.0;
     }
@@ -562,6 +777,10 @@ struct DocumentView::Impl {
 
         if (block.kind == BlockKind::Rule) {
             return before + static_cast<int>(std::lround(18 * scale)) + after;
+        }
+        if (block.kind == BlockKind::Image) {
+            return before + static_cast<int>(std::lround(130 * scale)) +
+                   after;
         }
         if (block.kind == BlockKind::Table) {
             const int rows = std::max(1, static_cast<int>(block.tableRows.size()));
@@ -685,6 +904,8 @@ struct DocumentView::Impl {
 
         if (block.kind == BlockKind::Rule) {
             item.height = static_cast<int>(std::lround(18 * scale));
+        } else if (block.kind == BlockKind::Image) {
+            BuildImageLayout(dc, item, width, scale);
         } else if (block.kind == BlockKind::Table) {
             BuildTableLayout(dc, item, width, scale);
         } else if (block.kind == BlockKind::Code ||
@@ -975,6 +1196,9 @@ struct DocumentView::Impl {
             case BlockKind::Table:
                 DrawTable(dc, item);
                 break;
+            case BlockKind::Image:
+                DrawImage(dc, item);
+                break;
             default:
                 if (!item.marker.empty()) {
                     TextStyle markerStyle;
@@ -993,6 +1217,48 @@ struct DocumentView::Impl {
                                 item.y + item.height + 3);
                 }
                 break;
+        }
+    }
+
+    void DrawImage(wxDC& dc, const BlockLayout& item) {
+        if (item.imageBitmap.IsOk()) {
+            dc.DrawBitmap(item.imageBitmap, item.x, item.y, true);
+        } else {
+            dc.SetPen(wxPen(palette.border, 1));
+            dc.SetBrush(wxBrush(palette.codeBackground));
+            dc.DrawRoundedRectangle(item.x, item.y, item.width, item.height,
+                                    FromDIPValue(6));
+
+            TextStyle style;
+            style.pointSize = 10;
+            dc.SetFont(FontFor(style));
+            dc.SetTextForeground(palette.mutedText);
+            const wxArrayString lines =
+                wxSplit(item.placeholderText, '\n', '\0');
+            int totalHeight = 0;
+            std::vector<wxSize> sizes;
+            sizes.reserve(lines.size());
+            for (const auto& line : lines) {
+                const wxSize size = dc.GetTextExtent(line);
+                sizes.push_back(size);
+                totalHeight += size.y;
+            }
+            int textY = item.y + (item.height - totalHeight) / 2;
+            for (std::size_t i = 0; i < lines.size(); ++i) {
+                const int textX =
+                    item.x + (item.width - sizes[i].x) / 2;
+                dc.DrawText(lines[i], textX, textY);
+                textY += sizes[i].y;
+            }
+        }
+
+        if (!item.marker.empty()) {
+            TextStyle markerStyle;
+            markerStyle.pointSize = 11;
+            markerStyle.bold = item.block->task;
+            dc.SetFont(FontFor(markerStyle));
+            dc.SetTextForeground(palette.mutedText);
+            dc.DrawText(item.marker, item.markerX, item.markerY);
         }
     }
 
@@ -1098,6 +1364,8 @@ DocumentView::DocumentView(wxWindow* parent)
     Bind(wxEVT_LEFT_DOWN, &DocumentView::OnLeftDown, this);
     Bind(wxEVT_LEFT_UP, &DocumentView::OnLeftUp, this);
     Bind(wxEVT_MOTION, &DocumentView::OnMouseMove, this);
+    Bind(wxEVT_THREAD, &DocumentView::OnImageLoaded, this,
+         kImageLoadedEventId);
     Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent&) {});
 }
 
@@ -1106,6 +1374,7 @@ DocumentView::~DocumentView() = default;
 void DocumentView::ShowPlaceholder() {
     impl_->tableDrag = nullptr;
     impl_->document.reset();
+    impl_->basePath.clear();
     impl_->messageTitle = U8("liteMark");
     impl_->messageBody = U8(
         "这是一个只读 Markdown 阅读器。\n"
@@ -1118,6 +1387,7 @@ void DocumentView::ShowPlaceholder() {
 void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
     impl_->tableDrag = nullptr;
     impl_->document.reset();
+    impl_->basePath.clear();
     impl_->messageTitle = title;
     impl_->messageBody = body;
     impl_->layoutDirty = true;
@@ -1126,9 +1396,11 @@ void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
 }
 
 void DocumentView::SetDocument(
-    std::shared_ptr<const MarkdownDocument> document, int scrollY) {
+    std::shared_ptr<const MarkdownDocument> document,
+    const wxString& basePath, int scrollY) {
     impl_->tableDrag = nullptr;
     impl_->document = std::move(document);
+    impl_->basePath = basePath;
     impl_->messageTitle.clear();
     impl_->messageBody.clear();
     const int width = GetClientSize().x;
@@ -1146,6 +1418,26 @@ void DocumentView::SetDocument(
     }
     impl_->pendingScrollY = std::max(0, scrollY);
     Refresh();
+}
+
+void DocumentView::OnImageLoaded(wxThreadEvent& event) {
+    const ImageLoadedPayload payload =
+        event.GetPayload<ImageLoadedPayload>();
+    impl_->requestedImages.erase(payload.key);
+    if (payload.image && payload.image->IsOk()) {
+        impl_->images[payload.key] = payload.image;
+        impl_->failedImages.erase(payload.key);
+    } else {
+        impl_->failedImages.insert(payload.key);
+    }
+
+    if (impl_->document) {
+        impl_->pendingScrollY = ScrollY();
+        impl_->layoutDirty = true;
+        impl_->layout.reset();
+        impl_->layoutCache.erase(impl_->document.get());
+        Refresh(false);
+    }
 }
 
 void DocumentView::ForgetDocument(

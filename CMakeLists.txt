@@ -42,6 +42,7 @@ add_executable(litemark WIN32
     src/app/main.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/windows/FileAssociation.cpp
+    src/platform/windows/ImageDownloader.cpp
     src/platform/windows/IpcServer.cpp
     src/platform/windows/SingletonGuard.cpp
     src/session/TabManager.cpp
@@ -52,7 +53,15 @@ add_executable(litemark WIN32
 )
 
 target_include_directories(litemark PRIVATE src ${MD4C_INCLUDE_DIR})
-target_link_libraries(litemark PRIVATE wxWidgets::core wxWidgets::base ${MD4C_LIBRARY})
+target_link_libraries(litemark PRIVATE
+    wxWidgets::core
+    wxWidgets::base
+    ${MD4C_LIBRARY}
+)
+
+if(WIN32)
+    target_link_libraries(litemark PRIVATE winhttp)
+endif()
 
 if(MINGW)
     target_compile_options(litemark PRIVATE

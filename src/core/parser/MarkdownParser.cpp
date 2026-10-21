@@ -444,6 +444,62 @@ int TextCallback(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* user
     return static_cast<Parser*>(userdata)->Text(type, text, size);
 }
 
+void NormalizeImages(MarkdownDocument& document) {
+    std::vector<Block> normalized;
+    normalized.reserve(document.blocks.size());
+
+    for (auto& block : document.blocks) {
+        const bool hasImage =
+            block.kind == BlockKind::Text &&
+            std::any_of(block.spans.begin(), block.spans.end(),
+                        [](const InlineSpan& span) { return span.image; });
+        if (!hasImage) {
+            normalized.push_back(std::move(block));
+            continue;
+        }
+
+        Block base = block;
+        std::vector<InlineSpan> textSpans;
+        bool emitted = false;
+
+        auto flushText = [&]() {
+            if (textSpans.empty()) {
+                return;
+            }
+            Block textBlock = base;
+            textBlock.kind = BlockKind::Text;
+            textBlock.spans = std::move(textSpans);
+            textBlock.listMarker = base.listMarker && !emitted;
+            normalized.push_back(std::move(textBlock));
+            emitted = true;
+            textSpans.clear();
+        };
+
+        for (auto& span : block.spans) {
+            if (span.image) {
+                flushText();
+                Block imageBlock = base;
+                imageBlock.kind = BlockKind::Image;
+                imageBlock.spans.clear();
+                imageBlock.imagePath = span.href;
+                imageBlock.imageAlt = span.text;
+                imageBlock.listMarker = base.listMarker && !emitted;
+                normalized.push_back(std::move(imageBlock));
+                emitted = true;
+            } else {
+                textSpans.push_back(std::move(span));
+            }
+        }
+        flushText();
+    }
+
+    BlockId nextId = 1;
+    for (auto& block : normalized) {
+        block.id = nextId++;
+    }
+    document.blocks = std::move(normalized);
+}
+
 }  // namespace
 
 namespace litemark {
@@ -475,6 +531,7 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
         return nullptr;
     }
 
+    NormalizeImages(*document);
     return document;
 }
 
