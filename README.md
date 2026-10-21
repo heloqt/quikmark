@@ -1,37 +1,45 @@
-# litemark
+# liteMark
 
-#### 介绍
-liteMark 是一个轻量、原生的 Markdown 阅读器——无 Electron、无浏览器内核，打开快、切换不卡、界面干净。
+liteMark 是一个原生、轻量、只读的 Markdown 阅读器，目标是不依赖浏览器内核，提供快速打开、Tab 切换和干净阅读体验。
 
-#### 软件架构
-软件架构说明
+当前仓库处于工程骨架阶段：
 
+- wxWidgets 3.3 + C++17 + CMake + MinGW-w64。
+- 单窗口多文档 Tab。
+- 文件菜单、文件关联参数和拖入打开。
+- UTF-8/UTF-8 BOM 读取及 64 MiB 安全上限。
+- 跟随系统、浅色和深色外观。
+- 纯文本预览占位，后续替换为 Markdown Block 渲染器。
 
-#### 安装教程
+需求与设计文档位于 [`doc/`](doc/)。
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## 构建环境
 
-#### 使用说明
+本项目的独立工具链位于：
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+```text
+D:\msys64-33
+```
 
-#### 参与贡献
+使用 `D:\msys64-33\ucrt64`，不要与现有 `D:\msys64` 混用。
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+## 构建
 
+在 PowerShell 中执行：
 
-#### 特技
+```powershell
+.\scripts\build.ps1 -Preset mingw-debug
+.\scripts\run.ps1 -Preset mingw-debug
+```
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Release 静态 wxWidgets 构建：
+
+```powershell
+.\scripts\build.ps1 -Preset mingw-release-static
+.\scripts\run.ps1 -Preset mingw-release-static
+```
+
+Debug 版本依赖 `D:\msys64-33\ucrt64\bin` 中的 wxWidgets DLL，请使用
+`run.ps1` 启动。Release 静态版本可以独立启动。
+
+命令行可以直接传入 Markdown 路径；`--smoke-test` 用于无交互启动检查。

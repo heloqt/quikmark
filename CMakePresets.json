@@ -1,0 +1,66 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-debug",
+      "displayName": "MinGW Debug (wxWidgets 3.3)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/mingw-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "D:/msys64-33/ucrt64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/msys64-33/ucrt64/bin/ninja.exe",
+        "CMAKE_RC_COMPILER": "D:/msys64-33/ucrt64/bin/windres.exe",
+        "CMAKE_PREFIX_PATH": "D:/msys64-33/ucrt64",
+        "LITEMARK_STATIC_WX": "OFF"
+      }
+    },
+    {
+      "name": "mingw-release",
+      "displayName": "MinGW Release (wxWidgets 3.3)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/mingw-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "D:/msys64-33/ucrt64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/msys64-33/ucrt64/bin/ninja.exe",
+        "CMAKE_RC_COMPILER": "D:/msys64-33/ucrt64/bin/windres.exe",
+        "CMAKE_PREFIX_PATH": "D:/msys64-33/ucrt64",
+        "LITEMARK_STATIC_WX": "OFF"
+      }
+    },
+    {
+      "name": "mingw-release-static",
+      "displayName": "MinGW Release Static wxWidgets",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/mingw-release-static",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "D:/msys64-33/ucrt64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/msys64-33/ucrt64/bin/ninja.exe",
+        "CMAKE_RC_COMPILER": "D:/msys64-33/ucrt64/bin/windres.exe",
+        "CMAKE_PREFIX_PATH": "D:/msys64-33/ucrt64",
+        "LITEMARK_STATIC_WX": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw-debug",
+      "configurePreset": "mingw-debug"
+    },
+    {
+      "name": "mingw-release",
+      "configurePreset": "mingw-release"
+    },
+    {
+      "name": "mingw-release-static",
+      "configurePreset": "mingw-release-static"
+    }
+  ]
+}

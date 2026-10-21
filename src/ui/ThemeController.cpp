@@ -1,0 +1,140 @@
+#include "ui/ThemeController.h"
+
+#include <wx/fileconf.h>
+#include <wx/filename.h>
+#include <wx/settings.h>
+#include <wx/stdpaths.h>
+
+namespace {
+
+constexpr const char* kAppearanceKey = "/appearance";
+
+wxString PreferencePath() {
+    wxFileName configDir(wxStandardPaths::Get().GetUserConfigDir(), wxString());
+    configDir.AppendDir("liteMark");
+    configDir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    return wxFileName(configDir.GetPath(), "settings.ini").GetFullPath();
+}
+
+}  // namespace
+
+namespace litemark {
+
+ThemeController::ThemeController() {
+    LoadPreference();
+    ApplyNativeAppearance();
+    RebuildPalette();
+}
+
+bool ThemeController::IsDark() const {
+    if (mode_ == ThemeMode::Dark) {
+        return true;
+    }
+    if (mode_ == ThemeMode::Light) {
+        return false;
+    }
+    return wxSystemSettings::GetAppearance().AreAppsDark();
+}
+
+void ThemeController::SetOnChanged(std::function<void()> onChanged) {
+    onChanged_ = std::move(onChanged);
+}
+
+void ThemeController::SetMode(ThemeMode mode) {
+    mode_ = mode;
+    ApplyNativeAppearance();
+    SavePreference();
+    Refresh();
+}
+
+void ThemeController::Refresh() {
+    RebuildPalette();
+    if (onChanged_) {
+        onChanged_();
+    }
+}
+
+wxString ThemeController::DisplayName(ThemeMode mode) {
+    switch (mode) {
+        case ThemeMode::System:
+            return wxString::FromUTF8("跟随系统");
+        case ThemeMode::Light:
+            return wxString::FromUTF8("浅色");
+        case ThemeMode::Dark:
+            return wxString::FromUTF8("深色");
+    }
+    return wxString::FromUTF8("跟随系统");
+}
+
+void ThemeController::LoadPreference() {
+    wxFileConfig config(wxString(), wxString(), PreferencePath(), wxString(),
+                        wxCONFIG_USE_LOCAL_FILE);
+    wxString value;
+    config.Read(kAppearanceKey, &value, "system");
+
+    if (value == "light") {
+        mode_ = ThemeMode::Light;
+    } else if (value == "dark") {
+        mode_ = ThemeMode::Dark;
+    } else {
+        mode_ = ThemeMode::System;
+    }
+}
+
+void ThemeController::SavePreference() const {
+    wxFileConfig config(wxString(), wxString(), PreferencePath(), wxString(),
+                        wxCONFIG_USE_LOCAL_FILE);
+    const char* value = "system";
+    if (mode_ == ThemeMode::Light) {
+        value = "light";
+    } else if (mode_ == ThemeMode::Dark) {
+        value = "dark";
+    }
+    config.Write(kAppearanceKey, wxString::FromUTF8(value));
+    config.Flush();
+}
+
+void ThemeController::ApplyNativeAppearance() {
+    wxApp::Appearance appearance = wxApp::Appearance::System;
+    if (mode_ == ThemeMode::Light) {
+        appearance = wxApp::Appearance::Light;
+    } else if (mode_ == ThemeMode::Dark) {
+        appearance = wxApp::Appearance::Dark;
+    }
+
+    if (wxTheApp != nullptr) {
+        static_cast<wxApp*>(wxTheApp)->SetAppearance(appearance);
+    }
+}
+
+void ThemeController::RebuildPalette() {
+    if (IsDark()) {
+        palette_ = {
+            wxColour("#202124"),
+            wxColour("#1E1E1E"),
+            wxColour("#D4D4D4"),
+            wxColour("#9AA0A6"),
+            wxColour("#66B2FF"),
+            wxColour("#3C4043"),
+            wxColour("#252526"),
+            wxColour("#5F6368"),
+            wxColour("#264F78"),
+            wxColour("#66B2FF"),
+        };
+    } else {
+        palette_ = {
+            wxColour("#F7F8FA"),
+            wxColour("#FFFFFF"),
+            wxColour("#24292F"),
+            wxColour("#57606A"),
+            wxColour("#0969DA"),
+            wxColour("#D0D7DE"),
+            wxColour("#F6F8FA"),
+            wxColour("#D0D7DE"),
+            wxColour("#B6D7FF"),
+            wxColour("#0969DA"),
+        };
+    }
+}
+
+}  // namespace litemark
