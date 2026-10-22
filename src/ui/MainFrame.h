@@ -67,6 +67,8 @@ private:
         ID_FIND_CLOSE,
         ID_FIND_TIMER,
         ID_SEARCH_COMPLETED,
+        ID_HELP_USAGE,
+        ID_ABOUT,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -138,6 +140,8 @@ private:
     void OnFindClose(wxCommandEvent& event);
     void OnFindTimer(wxTimerEvent& event);
     void OnSearchCompleted(wxThreadEvent& event);
+    void OnHelpUsage(wxCommandEvent& event);
+    void OnAbout(wxCommandEvent& event);
     void ShowFindBar();
     void HideFindBar();
     void StartSearch();

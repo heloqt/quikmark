@@ -1,10 +1,18 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(liteMark VERSION 0.1.0 LANGUAGES CXX RC)
+project(liteMark VERSION 1.0.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(LITEMARK_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${LITEMARK_GENERATED_DIR}/litemark")
+configure_file(
+    src/app/Version.h.in
+    "${LITEMARK_GENERATED_DIR}/litemark/Version.h"
+    @ONLY
+)
 
 option(LITEMARK_STATIC_WX "Link wxWidgets statically" OFF)
 
@@ -59,7 +67,11 @@ add_executable(litemark WIN32
     src/ui/ThemeController.cpp
 )
 
-target_include_directories(litemark PRIVATE src ${MD4C_INCLUDE_DIR})
+target_include_directories(litemark PRIVATE
+    src
+    ${LITEMARK_GENERATED_DIR}
+    ${MD4C_INCLUDE_DIR}
+)
 target_link_libraries(litemark PRIVATE
     wxWidgets::core
     wxWidgets::base

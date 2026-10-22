@@ -338,17 +338,21 @@ try {
     $mainMenu = [P2RegressionNative]::GetMenu(
         $selectionProcess.MainWindowHandle)
     $topMenuCount = [P2RegressionNative]::GetMenuItemCount($mainMenu)
-    if ($topMenuCount -ne 2) {
-        throw "Expected only File and View top-level menus."
+    if ($topMenuCount -ne 3) {
+        throw "Expected File, View and Help top-level menus."
     }
     $fileMenu = [P2RegressionNative]::GetSubMenu($mainMenu, 0)
     $viewMenu = [P2RegressionNative]::GetSubMenu($mainMenu, 1)
+    $helpMenu = [P2RegressionNative]::GetSubMenu($mainMenu, 2)
     $fileLabels = @(for ($i = 0;
                        $i -lt [P2RegressionNative]::GetMenuItemCount($fileMenu);
                        ++$i) { Get-MenuText $fileMenu $i })
     $viewLabels = @(for ($i = 0;
                        $i -lt [P2RegressionNative]::GetMenuItemCount($viewMenu);
                        ++$i) { Get-MenuText $viewMenu $i })
+    $helpLabels = @(for ($i = 0;
+                       $i -lt [P2RegressionNative]::GetMenuItemCount($helpMenu);
+                       ++$i) { Get-MenuText $helpMenu $i })
     if ($fileLabels -match '关闭当前 Tab' -or
         $viewLabels -match '上一个 Tab' -or
         $viewLabels -match '下一个 Tab') {
@@ -356,6 +360,10 @@ try {
     }
     if (-not ($viewLabels -match '查找')) {
         throw "Find menu entry is missing. View items: $($viewLabels -join ' | ')"
+    }
+    if (-not ($helpLabels -match '使用说明') -or
+        -not ($helpLabels -match '关于 liteMark')) {
+        throw "Help menu entries are missing. Help items: $($helpLabels -join ' | ')"
     }
     $document = Get-LargestChild $selectionProcess.MainWindowHandle
     Send-MouseDrag $document.Handle 35 45 520 250

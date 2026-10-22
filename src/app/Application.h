@@ -1,10 +1,16 @@
 #pragma once
 
+#include "litemark/Version.h"
+
 #include <wx/app.h>
 
 #include <memory>
+#include <string_view>
 
 namespace litemark {
+
+inline constexpr std::string_view kApplicationVersion{
+    LITEMARK_VERSION_STRING};
 
 class MainFrame;
 class IpcServer;

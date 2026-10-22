@@ -1,5 +1,6 @@
 #include "ui/MainFrame.h"
 
+#include "litemark/Version.h"
 #include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
 #include "platform/windows/PerformanceTrace.h"
@@ -8,10 +9,11 @@
 #include "ui/OutlineList.h"
 #include "ui/TabStrip.h"
 
-#include <wx/dnd.h>
-#include <wx/button.h>
+#include <wx/aboutdlg.h>
 #include <wx/accel.h>
+#include <wx/button.h>
 #include <wx/display.h>
+#include <wx/dnd.h>
 #include <wx/event.h>
 #include <wx/filedlg.h>
 #include <wx/filename.h>
@@ -20,9 +22,11 @@
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
+#include <wx/stdpaths.h>
 #include <wx/textctrl.h>
 #include <wx/timer.h>
 #include <wx/utils.h>
+#include <wx/version.h>
 
 #include <algorithm>
 #include <atomic>
@@ -388,12 +392,18 @@ void MainFrame::CreateMenuBar() {
     viewMenu->AppendSeparator();
     viewMenu->AppendCheckItem(ID_OUTLINE, U8("目录"));
 
+    auto* helpMenu = new wxMenu();
+    helpMenu->Append(ID_HELP_USAGE, U8("使用说明\tF1"));
+    helpMenu->AppendSeparator();
+    helpMenu->Append(ID_ABOUT, U8("关于 liteMark"));
+
     auto* menuBar = new wxMenuBar();
     menuBar->Append(fileMenu, U8("文件"));
     menuBar->Append(viewMenu, U8("查看"));
+    menuBar->Append(helpMenu, U8("帮助"));
     SetMenuBar(menuBar);
 
-    wxAcceleratorEntry accelerators[6];
+    wxAcceleratorEntry accelerators[7];
     accelerators[0].Set(wxACCEL_CTRL, 'W', ID_CLOSE_TAB);
     accelerators[1].Set(wxACCEL_CTRL, WXK_TAB, ID_NEXT_TAB);
     accelerators[2].Set(wxACCEL_CTRL | wxACCEL_SHIFT, WXK_TAB,
@@ -401,7 +411,8 @@ void MainFrame::CreateMenuBar() {
     accelerators[3].Set(wxACCEL_CTRL, 'F', ID_FIND);
     accelerators[4].Set(wxACCEL_NORMAL, WXK_F3, ID_FIND_NEXT);
     accelerators[5].Set(wxACCEL_SHIFT, WXK_F3, ID_FIND_PREVIOUS);
-    SetAcceleratorTable(wxAcceleratorTable(6, accelerators));
+    accelerators[6].Set(wxACCEL_NORMAL, WXK_F1, ID_HELP_USAGE);
+    SetAcceleratorTable(wxAcceleratorTable(7, accelerators));
 }
 
 void MainFrame::CreateFindBar() {
@@ -606,6 +617,45 @@ void MainFrame::OnFindClose(wxCommandEvent&) {
     HideFindBar();
 }
 
+void MainFrame::OnHelpUsage(wxCommandEvent&) {
+    const wxFileName executable(
+        wxStandardPaths::Get().GetExecutablePath());
+    const wxString separator(1, wxFileName::GetPathSeparator());
+    wxArrayString candidates;
+    candidates.Add(
+        executable.GetPath() + separator + U8("使用说明.md"));
+    candidates.Add(
+        executable.GetPath() + separator + ".." + separator + ".." +
+        separator + ".." + separator + "doc" + separator +
+        U8("12-使用说明.md"));
+    candidates.Add(
+        wxGetCwd() + separator + "doc" + separator +
+        U8("12-使用说明.md"));
+
+    for (const wxString& candidate : candidates) {
+        wxFileName usage(candidate);
+        usage.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
+        if (usage.FileExists() &&
+            wxLaunchDefaultApplication(usage.GetFullPath())) {
+            return;
+        }
+    }
+    wxMessageBox(U8("找不到使用说明。请重新安装 liteMark。"),
+                 U8("使用说明"), wxOK | wxICON_WARNING, this);
+}
+
+void MainFrame::OnAbout(wxCommandEvent&) {
+    wxAboutDialogInfo info;
+    info.SetName("liteMark");
+    info.SetVersion(wxString::FromUTF8(LITEMARK_VERSION_STRING));
+    info.SetDescription(
+        U8("纯阅读态 Markdown 阅读器\n\n构建：") +
+        wxString::FromUTF8(LITEMARK_BUILD_TYPE) + "\n" +
+        wxString::Format("wxWidgets %s", wxVERSION_STRING));
+    info.SetCopyright(U8("Copyright © 2026 liteMark contributors"));
+    wxAboutBox(info, this);
+}
+
 void MainFrame::OnFindTimer(wxTimerEvent&) {
     StartSearch();
 }
@@ -675,6 +725,8 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnFindNext, this, ID_FIND_NEXT);
     Bind(wxEVT_MENU, &MainFrame::OnFindPrevious, this, ID_FIND_PREVIOUS);
     Bind(wxEVT_MENU, &MainFrame::OnFindClose, this, ID_FIND_CLOSE);
+    Bind(wxEVT_MENU, &MainFrame::OnHelpUsage, this, ID_HELP_USAGE);
+    Bind(wxEVT_MENU, &MainFrame::OnAbout, this, ID_ABOUT);
     Bind(wxEVT_MENU, &MainFrame::OnCopy, this, wxID_COPY);
     Bind(wxEVT_MENU, &MainFrame::OnSelectAll, this, wxID_SELECTALL);
     Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);

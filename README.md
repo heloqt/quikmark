@@ -59,7 +59,7 @@ Debug 版本依赖 `D:\msys64-33\ucrt64\bin` 中的 wxWidgets DLL，请使用
 ## 打包
 
 ```powershell
-.\scripts\package.ps1 -Version 0.1.0
+.\scripts\package.ps1 -Version 1.0.0
 ```
 
 安装器输出到 `dist\`，打包脚本会拒绝超过 10 MB 的制品。

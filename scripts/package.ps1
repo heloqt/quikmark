@@ -1,13 +1,23 @@
 param(
-    [string]$Version = "0.1.0"
+    [string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Get-Location).Path
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $cmakeText = Get-Content -LiteralPath (Join-Path $projectRoot "CMakeLists.txt") -Raw
+    if ($cmakeText -match 'project\s*\(\s*liteMark\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+        $Version = $Matches[1]
+    } else {
+        throw "Unable to read the liteMark version from CMakeLists.txt"
+    }
+}
 $sourceExe = Join-Path $projectRoot "build\mingw-release-static\bin\litemark.exe"
 $makensis = "D:\msys64-33\ucrt64\bin\makensis.exe"
 $script = Join-Path $projectRoot "installer\litemark.nsi"
 $license = Join-Path $projectRoot "LICENSE"
+$usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
+$usageFile = Join-Path $projectRoot "build\liteMark-usage.md"
 $distDir = Join-Path $projectRoot "dist"
 $output = Join-Path $distDir "liteMark-$Version-setup.exe"
 
@@ -20,14 +30,21 @@ if (-not (Test-Path -LiteralPath $sourceExe)) {
 if (-not (Test-Path -LiteralPath $license)) {
     throw "LICENSE file not found."
 }
+if (-not (Test-Path -LiteralPath $usageSource)) {
+    throw "Usage document not found."
+}
 
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
 
 & $makensis `
     "/DAPP_VERSION=$Version" `
     "/DSOURCE_EXE=$sourceExe" `
     "/DLICENSE_FILE=$license" `
+    "/DUSAGE_FILE=$usageFile" `
     "/DOUTPUT_FILE=$output" `
+    "/INPUTCHARSET" `
+    "UTF8" `
     $script
 if ($LASTEXITCODE -ne 0) {
     throw "NSIS packaging failed"
