@@ -1,5 +1,5 @@
 param(
-    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\litemark.exe",
+    [string]$Exe = "",
     [int]$Samples = 20,
     [int]$LargeSamples = 3
 )
@@ -9,11 +9,25 @@ $ErrorActionPreference = "Stop"
 if (Get-Process litemark -ErrorAction SilentlyContinue) {
     throw "Close all running litemark instances before benchmarking."
 }
+$projectRoot = if ($PSScriptRoot) {
+    Split-Path -Parent $PSScriptRoot
+} else {
+    (Get-Location).Path
+}
+if ([string]::IsNullOrWhiteSpace($Exe)) {
+    $portableExe = Join-Path $projectRoot "liteMark.exe"
+    $Exe = if (Test-Path -LiteralPath $portableExe) {
+        $portableExe
+    } else {
+        Join-Path $projectRoot "build\mingw-release-static\bin\litemark.exe"
+    }
+} elseif (-not [IO.Path]::IsPathRooted($Exe)) {
+    $Exe = Join-Path $projectRoot $Exe
+}
 if (-not (Test-Path -LiteralPath $Exe)) {
     throw "Executable not found: $Exe"
 }
 
-$projectRoot = (Get-Location).Path
 $performanceConfigDir = Join-Path $projectRoot "build\perf-config"
 if (Test-Path -LiteralPath $performanceConfigDir) {
     $resolvedConfig = (Resolve-Path -LiteralPath $performanceConfigDir).Path
@@ -29,6 +43,28 @@ $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $system = Get-CimInstance Win32_ComputerSystem
 $operatingSystem = Get-CimInstance Win32_OperatingSystem
 $powerPlan = (powercfg /getactivescheme | Out-String).Trim()
+$powerOverlayState = Get-ItemProperty -LiteralPath `
+    "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes"
+$battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+$onAc = -not $battery -or $battery.BatteryStatus -eq 2
+$powerOverlay = if ($onAc) {
+    $powerOverlayState.ActiveOverlayAcPowerScheme
+} else {
+    $powerOverlayState.ActiveOverlayDcPowerScheme
+}
+$powerModeName = switch ($powerOverlay) {
+    "00000000-0000-0000-0000-000000000000" { "balanced"; break }
+    "961cc777-2547-4f9d-8174-7d86181b8a7a" { "best-efficiency"; break }
+    "ded574b5-45a0-4f42-8737-46345c09c238" { "best-performance"; break }
+    default { "unknown" }
+}
+$exeItem = Get-Item -LiteralPath $Exe
+$exeHash = (Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash
+$diskModels = @(
+    Get-CimInstance Win32_DiskDrive -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.Model }
+)
 $fixtureDir = Join-Path $projectRoot "build\perf-fixtures"
 $largeFixtureDir = Join-Path $projectRoot "build\perf-large-fixtures"
 $coldTrace = Join-Path $projectRoot "build\perf-cold.csv"
@@ -349,6 +385,13 @@ $result = [pscustomobject]@{
         OperatingSystem = "$($operatingSystem.Caption) $($operatingSystem.Version) build $($operatingSystem.BuildNumber)"
         DisplayScale = "100% (96 DPI)"
         PowerPlan = $powerPlan
+        PowerMode = $powerModeName
+        PowerOverlay = $powerOverlay
+        PowerSource = if ($onAc) { "AC" } else { "Battery" }
+        ExePath = $exeItem.FullName
+        ExeBytes = $exeItem.Length
+        ExeSha256 = $exeHash
+        DiskModels = $diskModels
         Build = "Release static"
         SampleDocuments = $Samples
         DocumentSize = "About 150 KB"

@@ -2606,7 +2606,7 @@ void DocumentView::OnMouseWheel(wxMouseEvent& event) {
         int x = 0;
         int y = 0;
         GetViewStart(&x, &y);
-        if (PerformanceTraceEnabled()) {
+        if (PerformanceTraceEnabled() && !impl_->scrollRequestedAt) {
             impl_->scrollRequestedAt = std::chrono::steady_clock::now();
         }
         Scroll(0, std::max(0, y - distance));
