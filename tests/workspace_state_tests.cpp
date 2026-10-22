@@ -45,6 +45,7 @@ void TestRoundTrip() {
     state.windowWidth = 1280;
     state.windowHeight = 900;
     state.maximized = true;
+    state.outlineVisible = true;
     state.selectedTab = 1;
     state.tabs = {
         {"C:\\文档\\alpha.md", 320},
@@ -63,6 +64,7 @@ void TestRoundTrip() {
     Check(loaded.windowWidth == 1280 && loaded.windowHeight == 900,
           "window size should round-trip");
     Check(loaded.maximized, "maximized state should round-trip");
+    Check(loaded.outlineVisible, "outline visibility should round-trip");
     Check(loaded.selectedTab == 1, "selected tab should round-trip");
     Check(loaded.tabs.size() == 2, "saved tab count should round-trip");
     Check(loaded.tabs[0].scrollY == 320 &&

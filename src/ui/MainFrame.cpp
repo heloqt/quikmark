@@ -13,6 +13,7 @@
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/fswatcher.h>
+#include <wx/listbox.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
@@ -20,6 +21,7 @@
 #include <wx/timer.h>
 #include <wx/utils.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -94,11 +96,15 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     changeBanner_->Hide();
 
     documentView_ = new DocumentView(this);
+    CreateOutlinePanel();
 
+    contentSizer_ = new wxBoxSizer(wxHORIZONTAL);
+    contentSizer_->Add(outlinePanel_, 0, wxEXPAND);
+    contentSizer_->Add(documentView_, 1, wxEXPAND);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(tabStrip_, 0, wxEXPAND);
     sizer->Add(changeBanner_, 0, wxEXPAND);
-    sizer->Add(documentView_, 1, wxEXPAND);
+    sizer->Add(contentSizer_, 1, wxEXPAND);
     SetSizer(sizer);
 
     SetMinSize(FromDIP(wxSize(720, 480)));
@@ -119,6 +125,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     RestoreWindowPlacement();
     RestoreWorkspace();
     UpdateRecentMenu();
+    SetOutlineVisible(workspace_.outlineVisible);
     TraceEvent("startup_restored",
                static_cast<double>(ProcessAgeMicroseconds()));
 }
@@ -198,6 +205,8 @@ void MainFrame::SaveWorkspace() {
     state.windowWidth = bounds.width;
     state.windowHeight = bounds.height;
     state.maximized = IsMaximized();
+    state.outlineVisible =
+        outlinePanel_ != nullptr && outlinePanel_->IsShown();
     state.selectedTab = static_cast<std::size_t>(
         std::max(0, tabs_.selectedIndex()));
     state.tabs.clear();
@@ -272,6 +281,80 @@ void MainFrame::RememberRecentFile(const wxString& path) {
     UpdateRecentMenu();
 }
 
+void MainFrame::LayoutOutlinePanel() {
+    if (outlinePanel_ == nullptr || contentSizer_ == nullptr ||
+        !outlinePanel_->IsShown()) {
+        return;
+    }
+    const wxSize client = GetClientSize();
+    const int width = std::max(FromDIP(180), client.x * 24 / 100);
+    outlinePanel_->SetMinSize(wxSize(width, -1));
+    Layout();
+}
+
+void MainFrame::UpdateOutline() {
+    if (outlinePanel_ == nullptr || outlineList_ == nullptr ||
+        !outlinePanel_->IsShown()) {
+        return;
+    }
+    updatingOutline_ = true;
+    outlineList_->Clear();
+    outlineSlugs_.clear();
+    const auto headings = documentView_->OutlineHeadings();
+    for (const auto& heading : headings) {
+        outlineList_->Append(
+            wxString::FromUTF8(heading.text.data(), heading.text.size()));
+        outlineSlugs_.push_back(
+            wxString::FromUTF8(heading.slug.data(), heading.slug.size()));
+    }
+    updatingOutline_ = false;
+    outlineList_->Show(!headings.empty());
+    outlineEmptyText_->Show(headings.empty());
+    outlinePanel_->Layout();
+    LayoutOutlinePanel();
+}
+
+void MainFrame::OnOutline(wxCommandEvent&) {
+    SetOutlineVisible(outlinePanel_ == nullptr || !outlinePanel_->IsShown());
+}
+
+void MainFrame::SetOutlineVisible(bool visible) {
+    if (outlinePanel_ == nullptr || contentSizer_ == nullptr) {
+        return;
+    }
+    contentSizer_->Show(outlinePanel_, visible, true);
+    outlinePanel_->Show(visible);
+    if (auto* item = GetMenuBar()->FindItem(ID_OUTLINE)) {
+        item->Check(visible);
+    }
+    if (visible) {
+        LayoutOutlinePanel();
+        UpdateOutline();
+    } else {
+        Layout();
+    }
+}
+
+void MainFrame::OnOutlineItem(wxCommandEvent&) {
+    if (updatingOutline_ || outlineList_ == nullptr) {
+        return;
+    }
+    const int selected = outlineList_->GetSelection();
+    if (selected == wxNOT_FOUND ||
+        static_cast<std::size_t>(selected) >= outlineSlugs_.size()) {
+        return;
+    }
+    documentView_->ScrollToAnchor(U8("#") + outlineSlugs_[
+        static_cast<std::size_t>(selected)]);
+}
+
+void MainFrame::OnFrameSize(wxSizeEvent& event) {
+    event.Skip();
+    if (outlinePanel_ != nullptr && outlinePanel_->IsShown()) {
+        CallAfter([this]() { LayoutOutlinePanel(); });
+    }
+}
+
 void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
     fileMenu->Append(wxID_OPEN, U8("打开...\tCtrl+O"));
@@ -301,14 +384,40 @@ void MainFrame::CreateMenuBar() {
     viewMenu->Append(ID_NEXT_TAB, U8("下一个 Tab\tCtrl+Tab"));
     viewMenu->Append(ID_PREVIOUS_TAB, U8("上一个 Tab\tCtrl+Shift+Tab"));
     viewMenu->AppendSeparator();
-    wxMenuItem* outline = viewMenu->Append(ID_OUTLINE, U8("目录（P2）"));
-    outline->Enable(false);
+    viewMenu->AppendCheckItem(ID_OUTLINE, U8("目录"));
 
     auto* menuBar = new wxMenuBar();
     menuBar->Append(fileMenu, U8("文件"));
     menuBar->Append(editMenu, U8("编辑"));
     menuBar->Append(viewMenu, U8("查看"));
     SetMenuBar(menuBar);
+}
+
+void MainFrame::CreateOutlinePanel() {
+    outlinePanel_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
+                                wxDefaultSize, wxBORDER_SIMPLE);
+
+    auto* title = new wxStaticText(outlinePanel_, wxID_ANY, U8("目录"));
+    wxFont titleFont(wxFontInfo(11).FaceName("Microsoft YaHei UI"));
+    titleFont.SetWeight(wxFONTWEIGHT_BOLD);
+    title->SetFont(titleFont);
+
+    outlineList_ = new wxListBox(
+        outlinePanel_, ID_OUTLINE_LIST, wxDefaultPosition, wxDefaultSize,
+        0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB | wxBORDER_NONE);
+    outlineEmptyText_ = new wxStaticText(
+        outlinePanel_, wxID_ANY, U8("当前文档没有标题"),
+        wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+    outlineEmptyText_->Hide();
+
+    auto* outlineSizer = new wxBoxSizer(wxVERTICAL);
+    outlineSizer->Add(title, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP,
+                      FromDIP(16));
+    outlineSizer->Add(outlineList_, 1, wxEXPAND | wxALL, FromDIP(8));
+    outlineSizer->Add(outlineEmptyText_, 1,
+                      wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    outlinePanel_->SetSizer(outlineSizer);
+    outlinePanel_->Hide();
 }
 
 void MainFrame::BindEvents() {
@@ -325,6 +434,8 @@ void MainFrame::BindEvents() {
          ID_APPEARANCE_DARK);
     Bind(wxEVT_MENU, &MainFrame::OnRecentFile, this, ID_RECENT_FIRST,
          ID_RECENT_LAST);
+    Bind(wxEVT_MENU, &MainFrame::OnOutline, this, ID_OUTLINE);
+    Bind(wxEVT_LISTBOX, &MainFrame::OnOutlineItem, this, ID_OUTLINE_LIST);
     Bind(wxEVT_MENU, &MainFrame::OnCopy, this, wxID_COPY);
     Bind(wxEVT_MENU, &MainFrame::OnSelectAll, this, wxID_SELECTALL);
     Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);
@@ -332,6 +443,7 @@ void MainFrame::BindEvents() {
         tabs_.DismissChangeNotice();
         UpdateChangeBanner();
         Layout();
+        LayoutOutlinePanel();
     }, ID_DISMISS_CHANGE);
     Bind(wxEVT_SYS_COLOUR_CHANGED, &MainFrame::OnSystemColourChanged, this);
     Bind(wxEVT_FSWATCHER, &MainFrame::OnFileChanged, this);
@@ -339,6 +451,7 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_THREAD, &MainFrame::OnParseCompleted, this, ID_PARSE_COMPLETED);
     Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnCloseWindow, this);
     Bind(wxEVT_CHAR_HOOK, &MainFrame::OnCharHook, this);
+    Bind(wxEVT_SIZE, &MainFrame::OnFrameSize, this);
 }
 
 void MainFrame::ApplyTheme() {
@@ -353,6 +466,13 @@ void MainFrame::ApplyTheme() {
             child->SetBackgroundColour(palette.selection);
             child->SetForegroundColour(palette.text);
         }
+    }
+    if (outlinePanel_ != nullptr) {
+        outlinePanel_->SetBackgroundColour(palette.documentBackground);
+        outlinePanel_->SetForegroundColour(palette.text);
+        outlineList_->SetBackgroundColour(palette.documentBackground);
+        outlineList_->SetForegroundColour(palette.text);
+        outlineEmptyText_->SetForegroundColour(palette.mutedText);
     }
     UpdateAppearanceMenu();
     Refresh();
@@ -417,6 +537,7 @@ void MainFrame::UpdateFromTabs() {
     }
     UpdateChangeBanner();
     Layout();
+    UpdateOutline();
 }
 
 void MainFrame::UpdateChangeBanner() {

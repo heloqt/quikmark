@@ -19,6 +19,7 @@ struct WorkspaceState {
     int windowWidth = 0;
     int windowHeight = 0;
     bool maximized = false;
+    bool outlineVisible = false;
     std::size_t selectedTab = 0;
     std::vector<SavedTabState> tabs;
     std::vector<std::string> recentFiles;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/document/DocumentNavigation.h"
 #include "core/model/Block.h"
 #include "ui/ThemeController.h"
 
@@ -8,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <vector>
 
 class wxPaintEvent;
 class wxSizeEvent;
@@ -36,6 +38,7 @@ public:
     int ScrollY() const;
     void SelectAll();
     bool CopySelectionToClipboard();
+    std::vector<HeadingAnchor> OutlineHeadings();
     bool ScrollToAnchor(const wxString& reference);
     void ApplyTheme(const ThemePalette& palette);
 

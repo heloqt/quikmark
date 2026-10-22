@@ -100,8 +100,18 @@ function Send-WheelDown([IntPtr]$Window, [int]$Count) {
 
 $projectRoot = (Get-Location).Path
 $fixtureDir = Join-Path $projectRoot "build\scroll-regression"
+$configRoot = Join-Path $projectRoot "build\scroll-regression-config"
 $traceFile = Join-Path $projectRoot "build\scroll-regression.csv"
+if (Test-Path -LiteralPath $configRoot) {
+    $resolved = (Resolve-Path -LiteralPath $configRoot).Path
+    if (-not $resolved.StartsWith(
+            $projectRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected test config path: $resolved"
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
 New-Item -ItemType Directory -Path $fixtureDir -Force | Out-Null
+New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
 
 $chunk = @'
 # Scroll regression
@@ -136,6 +146,7 @@ $secondFile = Join-Path $fixtureDir "second.md"
 
 [IO.File]::WriteAllText($traceFile, "", [Text.UTF8Encoding]::new($false))
 $env:LITEMARK_PERF_TRACE = $traceFile
+$env:LITEMARK_CONFIG_DIR = $configRoot
 $primary = Start-Process -FilePath $Exe -ArgumentList $firstFile -PassThru
 try {
     Wait-Title $primary "first.md*"
@@ -187,4 +198,5 @@ try {
         Wait-Process -Id $primary.Id -Timeout 5 -ErrorAction SilentlyContinue
     }
     Remove-Item Env:LITEMARK_PERF_TRACE -ErrorAction SilentlyContinue
+    Remove-Item Env:LITEMARK_CONFIG_DIR -ErrorAction SilentlyContinue
 }

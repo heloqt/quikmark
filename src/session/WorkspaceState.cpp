@@ -77,6 +77,7 @@ WorkspaceState WorkspaceStore::Load() const {
     state.windowWidth = std::max(0, ReadInt(values, "window.width", 0));
     state.windowHeight = std::max(0, ReadInt(values, "window.height", 0));
     state.maximized = ReadInt(values, "window.maximized", 0) != 0;
+    state.outlineVisible = ReadInt(values, "outline.visible", 0) != 0;
 
     const std::size_t tabCount =
         ReadCount(values, "tabs.count", kMaximumSavedTabs);
@@ -134,6 +135,7 @@ bool WorkspaceStore::Save(const WorkspaceState& state,
     output << "window.width=" << state.windowWidth << '\n';
     output << "window.height=" << state.windowHeight << '\n';
     output << "window.maximized=" << (state.maximized ? 1 : 0) << '\n';
+    output << "outline.visible=" << (state.outlineVisible ? 1 : 0) << '\n';
     output << "tabs.selected=" << state.selectedTab << '\n';
 
     const std::size_t tabCount =

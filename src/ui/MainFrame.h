@@ -20,11 +20,14 @@
 class wxCommandEvent;
 class wxCloseEvent;
 class wxKeyEvent;
+class wxListBox;
+class wxBoxSizer;
 class wxFileSystemWatcherEvent;
 class wxMenu;
 class wxPanel;
 class wxStaticText;
 class wxSysColourChangedEvent;
+class wxSizeEvent;
 class wxThreadEvent;
 class wxTimerEvent;
 
@@ -54,6 +57,7 @@ private:
         ID_PREVIOUS_TAB,
         ID_RECENT_FIRST,
         ID_RECENT_LAST = ID_RECENT_FIRST + 4,
+        ID_OUTLINE_LIST,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -67,6 +71,13 @@ private:
     };
 
     void CreateMenuBar();
+    void CreateOutlinePanel();
+    void SetOutlineVisible(bool visible);
+    void LayoutOutlinePanel();
+    void UpdateOutline();
+    void OnOutline(wxCommandEvent& event);
+    void OnOutlineItem(wxCommandEvent& event);
+    void OnFrameSize(wxSizeEvent& event);
     void BindEvents();
     void ApplyTheme();
     void UpdateAppearanceMenu();
@@ -116,6 +127,12 @@ private:
     DocumentView* documentView_ = nullptr;
     wxPanel* changeBanner_ = nullptr;
     wxStaticText* changeText_ = nullptr;
+    wxPanel* outlinePanel_ = nullptr;
+    wxBoxSizer* contentSizer_ = nullptr;
+    wxListBox* outlineList_ = nullptr;
+    wxStaticText* outlineEmptyText_ = nullptr;
+    std::vector<wxString> outlineSlugs_;
+    bool updatingOutline_ = false;
     wxMenu* recentMenu_ = nullptr;
     std::vector<std::unique_ptr<ParseTask>> parseTasks_;
     std::map<std::uint64_t, std::chrono::steady_clock::time_point>

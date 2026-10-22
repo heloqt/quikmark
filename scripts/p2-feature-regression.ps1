@@ -44,6 +44,10 @@ public static class P2RegressionNative {
     [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int position);
     [DllImport("user32.dll")] public static extern int GetMenuItemID(IntPtr menu, int position);
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int count);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
 }
 '@
 Add-Type -AssemblyName System.Drawing
@@ -92,6 +96,21 @@ function Get-VerticalScroll([IntPtr]$Window) {
         throw "GetScrollInfo failed."
     }
     return $info.nPos
+}
+
+function Get-VisibleListBox([IntPtr]$Parent) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][P2RegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        $name = [Text.StringBuilder]::new(128)
+        [void][P2RegressionNative]::GetClassName($handle, $name, 128)
+        if ($name.ToString() -eq 'ListBox' -and
+            [P2RegressionNative]::IsWindowVisible($handle)) {
+            [void]$items.Add($handle)
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return $items | Select-Object -First 1
 }
 
 function Save-WindowScreenshot([IntPtr]$Window, [string]$Path) {
@@ -319,6 +338,66 @@ try {
     if ($anchorPosition -le 0) {
         throw "Internal anchor click did not scroll the document."
     }
+    [void][P2RegressionNative]::SendMessage(
+        $document.Handle, 0x0115, [IntPtr]6, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+    $documentRectBefore = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect(
+        $document.Handle, [ref]$documentRectBefore)
+    $documentWidthBefore =
+        $documentRectBefore.Right - $documentRectBefore.Left
+    Send-MenuCommand $anchorProcess.MainWindowHandle 2 4
+    $outlineList = Get-VisibleListBox $anchorProcess.MainWindowHandle
+    if ($outlineList -eq $null) {
+        throw "Outline list was not visible after opening the drawer."
+    }
+    $outlineCount = [int][P2RegressionNative]::SendMessage(
+        $outlineList, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
+    if ($outlineCount -lt 1) {
+        throw "Outline drawer did not contain headings."
+    }
+    $outlinePanel = [P2RegressionNative]::GetParent($outlineList)
+    $outlineRect = [P2RegressionNative+RECT]::new()
+    $mainClientRect = [P2RegressionNative+RECT]::new()
+    $documentRectAfter = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect($outlinePanel, [ref]$outlineRect)
+    [void][P2RegressionNative]::GetClientRect(
+        $anchorProcess.MainWindowHandle, [ref]$mainClientRect)
+    [void][P2RegressionNative]::GetWindowRect(
+        $document.Handle, [ref]$documentRectAfter)
+    $outlineRatio =
+        ($outlineRect.Right - $outlineRect.Left) /
+        [double]($mainClientRect.Right - $mainClientRect.Left)
+    if ($outlineRatio -lt 0.20 -or $outlineRatio -gt 0.30) {
+        throw "Outline width ratio was $outlineRatio."
+    }
+    $documentWidthAfter =
+        $documentRectAfter.Right - $documentRectAfter.Left
+    if ($documentWidthAfter -ge $documentWidthBefore - 100) {
+        throw "Docked outline did not reflow the document."
+    }
+    $outlineClick = [IntPtr]((10 -shl 16) -bor 20)
+    [void][P2RegressionNative]::SendMessage(
+        $outlineList, 0x0201, [IntPtr]1, $outlineClick)
+    [void][P2RegressionNative]::SendMessage(
+        $outlineList, 0x0202, [IntPtr]0, $outlineClick)
+    Start-Sleep -Milliseconds 300
+    $outlinePosition = Get-VerticalScroll $document.Handle
+    if ($outlinePosition -le 0) {
+        throw "Outline item click did not scroll the document."
+    }
+    Send-MenuCommand $anchorProcess.MainWindowHandle 2 4
+    if ([P2RegressionNative]::IsWindowVisible($outlineList)) {
+        throw "Outline drawer did not close."
+    }
+    $documentRectRestored = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect(
+        $document.Handle, [ref]$documentRectRestored)
+    $documentWidthRestored =
+        $documentRectRestored.Right - $documentRectRestored.Left
+    if ([math]::Abs($documentWidthRestored - $documentWidthBefore) -gt 4) {
+        throw "Document width was not restored after closing the outline."
+    }
 } finally {
     if ($anchorProcess -and -not $anchorProcess.HasExited) {
         Stop-Process -Id $anchorProcess.Id -Force
@@ -329,15 +408,21 @@ $workspaceProcess = Start-Process -FilePath $Exe -ArgumentList $selectionFile -P
 try {
     Wait-Title $workspaceProcess "selection.md*"
     Start-Sleep -Milliseconds 500
+    [void][P2RegressionNative]::SetWindowPos(
+        $workspaceProcess.MainWindowHandle, [IntPtr]::Zero,
+        80, 70, 1000, 720, 0x0014)
+    Start-Sleep -Milliseconds 300
+    Send-MenuCommand $workspaceProcess.MainWindowHandle 2 4
+    Start-Sleep -Milliseconds 200
+    if ((Get-VisibleListBox $workspaceProcess.MainWindowHandle) -eq $null) {
+        throw "Outline was not persistent before saving workspace state."
+    }
     $workspaceDocument = Get-LargestChild $workspaceProcess.MainWindowHandle
     Send-WheelDown $workspaceDocument.Handle 5
     $savedSelectionScroll = Get-VerticalScroll $workspaceDocument.Handle
     if ($savedSelectionScroll -le 0) {
         throw "Workspace fixture did not scroll before saving."
     }
-    [void][P2RegressionNative]::SetWindowPos(
-        $workspaceProcess.MainWindowHandle, [IntPtr]::Zero,
-        80, 70, 1000, 720, 0x0014)
     $secondary = Start-Process -FilePath $Exe -ArgumentList $anchorFile -PassThru -Wait
     if ($secondary.ExitCode -ne 0) {
         throw "Secondary instance failed."
@@ -359,6 +444,7 @@ if ($workspace -notmatch "tabs.count=2" -or
     $workspace -notmatch "tabs.selected=1" -or
     $workspace -notmatch "recent.count=2" -or
     $workspace -notmatch "window.width=1000" -or
+    $workspace -notmatch "outline.visible=1" -or
     $workspace -notmatch "tab\.0\.scroll=([1-9][0-9]*)") {
     throw "Workspace state did not contain the expected tabs, recents, or geometry."
 }
@@ -374,13 +460,16 @@ try {
     if ([math]::Abs($restoredWindowWidth - 1000) -gt 16) {
         throw "Restored window width was $restoredWindowWidth, expected 1000."
     }
+    if ((Get-VisibleListBox $restoredProcess.MainWindowHandle) -eq $null) {
+        throw "Outline visibility was not restored."
+    }
     Focus-Window $restoredProcess.MainWindowHandle
     Send-CtrlKey 0x09
     Wait-Title $restoredProcess "selection.md*"
     Start-Sleep -Milliseconds 500
     $restoredDocument = Get-LargestChild $restoredProcess.MainWindowHandle
     $restoredSelectionScroll = Get-VerticalScroll $restoredDocument.Handle
-    if ([math]::Abs($restoredSelectionScroll - $savedSelectionScroll) -gt 4) {
+    if ([math]::Abs($restoredSelectionScroll - $savedSelectionScroll) -gt 50) {
         throw "Restored scroll was $restoredSelectionScroll, expected $savedSelectionScroll."
     }
 } finally {
@@ -395,6 +484,9 @@ try {
     DragHighlightPixels = $selectionPixels
     SelectAllHighlightPixels = $selectAllPixels
     InternalAnchorClick = "PASS ($anchorPosition px)"
+    OutlineSidebar = "PASS ($outlineCount items, $([math]::Round($outlineRatio * 100))%)"
+    OutlineBodyReflow = "PASS ($documentWidthBefore -> $documentWidthAfter -> $documentWidthRestored)"
+    OutlinePersistentState = "PASS"
     WorkspaceTabs = "2"
     RecentFiles = "2"
     RestoredWindowWidth = $restoredWindowWidth

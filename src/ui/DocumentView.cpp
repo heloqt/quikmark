@@ -543,6 +543,11 @@ ExternalLinkResult OpenExternalLink(const wxString& href) {
 namespace litemark {
 
 struct DocumentView::Impl {
+    struct ReadingAnchor {
+        std::size_t blockIndex = 0;
+        int intraBlockY = 0;
+    };
+
     struct PendingPaintTrace {
         std::string event;
         std::optional<std::chrono::steady_clock::time_point> start;
@@ -570,6 +575,8 @@ struct DocumentView::Impl {
     bool layoutDirty = true;
     int layoutWidth = 0;
     PendingScrollPosition pendingScrollY;
+    std::optional<ReadingAnchor> pendingReadingAnchor;
+    bool suppressSizeReadingAnchor = false;
     double fontScale = 1.0;
     double zoomWheelAccumulator = 0.0;
     FontMap fonts;
@@ -1637,6 +1644,40 @@ struct DocumentView::Impl {
                      selectedLine->segments.back().sourceEnd)};
     }
 
+    std::optional<ReadingAnchor> CaptureReadingAnchor() const {
+        if (!layout || layout->slots.empty()) {
+            return std::nullopt;
+        }
+        const int scrollY = owner->ScrollY();
+        int blockY = owner->FromDIP(34);
+        for (std::size_t index = 0; index < layout->slots.size(); ++index) {
+            const int height = SlotHeight(layout->slots[index]);
+            if (scrollY < blockY + height) {
+                return ReadingAnchor{
+                    index, std::max(0, scrollY - blockY)};
+            }
+            blockY += height;
+        }
+        const std::size_t last = layout->slots.size() - 1;
+        return ReadingAnchor{
+            last, std::max(0, SlotHeight(layout->slots[last]) - 1)};
+    }
+
+    int ReadingAnchorScrollY(const ReadingAnchor& anchor) const {
+        if (!layout || layout->slots.empty()) {
+            return 0;
+        }
+        const std::size_t index =
+            std::min(anchor.blockIndex, layout->slots.size() - 1);
+        int blockY = owner->FromDIP(34);
+        for (std::size_t current = 0; current < index; ++current) {
+            blockY += SlotHeight(layout->slots[current]);
+        }
+        return blockY +
+               std::min(anchor.intraBlockY,
+                        std::max(0, SlotHeight(layout->slots[index]) - 1));
+    }
+
     void ClearSelection() {
         selectionAnchor.reset();
         selectionFocus.reset();
@@ -2262,6 +2303,8 @@ void DocumentView::ShowPlaceholder() {
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
     impl_->layoutDirty = true;
     impl_->pendingScrollY.Request(0);
+    impl_->pendingReadingAnchor.reset();
+    impl_->suppressSizeReadingAnchor = false;
     Refresh();
 }
 
@@ -2276,6 +2319,8 @@ void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
     impl_->messageBody = body;
     impl_->layoutDirty = true;
     impl_->pendingScrollY.Request(0);
+    impl_->pendingReadingAnchor.reset();
+    impl_->suppressSizeReadingAnchor = false;
     Refresh();
 }
 
@@ -2304,6 +2349,8 @@ void DocumentView::SetDocument(
         impl_->layoutDirty = true;
     }
     impl_->pendingScrollY.Request(scrollY);
+    impl_->pendingReadingAnchor.reset();
+    impl_->suppressSizeReadingAnchor = true;
     Refresh();
 }
 
@@ -2414,18 +2461,26 @@ bool DocumentView::CopySelectionToClipboard() {
     return copied;
 }
 
+std::vector<HeadingAnchor> DocumentView::OutlineHeadings() {
+    if (!impl_->document) {
+        return {};
+    }
+    if (!impl_->headingAnchorsBuilt) {
+        impl_->headingAnchors = BuildHeadingAnchors(*impl_->document);
+        impl_->headingAnchorsBuilt = true;
+    }
+    return impl_->headingAnchors;
+}
+
 bool DocumentView::ScrollToAnchor(const wxString& reference) {
     if (!impl_->document || impl_->document->blocks.empty() ||
         !impl_->layout) {
         return false;
     }
     const wxScopedCharBuffer utf8 = reference.ToUTF8();
-    if (!impl_->headingAnchorsBuilt) {
-        impl_->headingAnchors = BuildHeadingAnchors(*impl_->document);
-        impl_->headingAnchorsBuilt = true;
-    }
+    const auto anchors = OutlineHeadings();
     const auto block = FindHeadingBlock(
-        impl_->headingAnchors,
+        anchors,
         std::string_view(utf8.data(), utf8.length()));
     if (!block) {
         return false;
@@ -2451,6 +2506,11 @@ void DocumentView::ApplyTheme(const ThemePalette& palette) {
 void DocumentView::OnSize(wxSizeEvent& event) {
     impl_->tableDrag = nullptr;
     if (event.GetSize().x != impl_->layoutWidth) {
+        if (!impl_->suppressSizeReadingAnchor) {
+            if (const auto anchor = impl_->CaptureReadingAnchor()) {
+                impl_->pendingReadingAnchor = anchor;
+            }
+        }
         impl_->layoutDirty = true;
     }
     Refresh();
@@ -2747,8 +2807,16 @@ void DocumentView::OnPaint(wxPaintEvent&) {
 
     const int totalHeight = impl_->TotalHeight() + pageMargin * 2;
     SetVirtualSize(wxSize(client.x, std::max(client.y, totalHeight)));
+    if (impl_->pendingReadingAnchor) {
+        impl_->pendingScrollY.Request(
+            impl_->ReadingAnchorScrollY(*impl_->pendingReadingAnchor));
+        impl_->pendingReadingAnchor.reset();
+    }
     if (const auto target = impl_->pendingScrollY.Take()) {
-        CallAfter([this, target]() { Scroll(0, *target); });
+        CallAfter([this, target]() {
+            Scroll(0, *target);
+            impl_->suppressSizeReadingAnchor = false;
+        });
     }
 
     if (paintStart) {
