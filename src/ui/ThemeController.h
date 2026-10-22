@@ -39,7 +39,9 @@ public:
     void SetMode(ThemeMode mode);
     void Refresh();
 
+    static ThemeMode ParseMode(const wxString& value);
     static wxString DisplayName(ThemeMode mode);
+    static ThemePalette BuildPalette(bool dark);
 
 private:
     void LoadPreference();

@@ -66,19 +66,24 @@ wxString ThemeController::DisplayName(ThemeMode mode) {
     return wxString::FromUTF8("跟随系统");
 }
 
+ThemeMode ThemeController::ParseMode(const wxString& value) {
+    const wxString normalized = value.Lower().Trim().Trim(false);
+    if (normalized == "light") {
+        return ThemeMode::Light;
+    }
+    if (normalized == "dark") {
+        return ThemeMode::Dark;
+    }
+    return ThemeMode::System;
+}
+
 void ThemeController::LoadPreference() {
     wxFileConfig config(wxString(), wxString(), PreferencePath(), wxString(),
                         wxCONFIG_USE_LOCAL_FILE);
     wxString value;
     config.Read(kAppearanceKey, &value, "system");
 
-    if (value == "light") {
-        mode_ = ThemeMode::Light;
-    } else if (value == "dark") {
-        mode_ = ThemeMode::Dark;
-    } else {
-        mode_ = ThemeMode::System;
-    }
+    mode_ = ParseMode(value);
 }
 
 void ThemeController::SavePreference() const {
@@ -108,8 +113,12 @@ void ThemeController::ApplyNativeAppearance() {
 }
 
 void ThemeController::RebuildPalette() {
-    if (IsDark()) {
-        palette_ = {
+    palette_ = BuildPalette(IsDark());
+}
+
+ThemePalette ThemeController::BuildPalette(bool dark) {
+    if (dark) {
+        return {
             wxColour("#202124"),
             wxColour("#1E1E1E"),
             wxColour("#D4D4D4"),
@@ -121,20 +130,19 @@ void ThemeController::RebuildPalette() {
             wxColour("#264F78"),
             wxColour("#66B2FF"),
         };
-    } else {
-        palette_ = {
-            wxColour("#F7F8FA"),
-            wxColour("#FFFFFF"),
-            wxColour("#24292F"),
-            wxColour("#57606A"),
-            wxColour("#0969DA"),
-            wxColour("#D0D7DE"),
-            wxColour("#F6F8FA"),
-            wxColour("#D0D7DE"),
-            wxColour("#B6D7FF"),
-            wxColour("#0969DA"),
-        };
     }
+    return {
+        wxColour("#F7F8FA"),
+        wxColour("#FFFFFF"),
+        wxColour("#24292F"),
+        wxColour("#57606A"),
+        wxColour("#0969DA"),
+        wxColour("#D0D7DE"),
+        wxColour("#F6F8FA"),
+        wxColour("#D0D7DE"),
+        wxColour("#B6D7FF"),
+        wxColour("#0969DA"),
+    };
 }
 
 }  // namespace litemark

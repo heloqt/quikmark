@@ -88,9 +88,23 @@ message(STATUS "liteMark ${PROJECT_VERSION}")
 message(STATUS "wxWidgets 3.3, static=${LITEMARK_STATIC_WX}")
 message(STATUS "md4c: ${MD4C_LIBRARY}")
 
-option(LITEMARK_BUILD_TESTS "Build parser regression tests" ON)
+option(LITEMARK_BUILD_TESTS "Build regression tests" ON)
 if(LITEMARK_BUILD_TESTS)
     enable_testing()
+
+    add_executable(litemark_pending_scroll_tests
+        tests/pending_scroll_tests.cpp
+    )
+    target_include_directories(litemark_pending_scroll_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_pending_scroll_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME pending_scroll_state COMMAND litemark_pending_scroll_tests)
+
     add_executable(litemark_parser_tests
         tests/parser_smoke.cpp
         src/core/flow/Flowchart.cpp
@@ -106,4 +120,129 @@ if(LITEMARK_BUILD_TESTS)
         )
     endif()
     add_test(NAME parser_smoke COMMAND litemark_parser_tests)
+
+    add_executable(litemark_tab_manager_tests
+        tests/tab_manager_tests.cpp
+        src/core/flow/Flowchart.cpp
+        src/core/parser/MarkdownParser.cpp
+        src/session/TabManager.cpp
+    )
+    target_include_directories(litemark_tab_manager_tests PRIVATE
+        src
+        ${MD4C_INCLUDE_DIR}
+    )
+    target_link_libraries(litemark_tab_manager_tests PRIVATE
+        wxWidgets::base
+        ${MD4C_STATIC_LIBRARY}
+    )
+    if(MINGW)
+        target_link_options(litemark_tab_manager_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME tab_manager_state COMMAND litemark_tab_manager_tests)
+
+    add_executable(litemark_resource_policy_tests
+        tests/resource_policy_tests.cpp
+    )
+    target_include_directories(litemark_resource_policy_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_resource_policy_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME resource_policy COMMAND litemark_resource_policy_tests)
+
+    add_executable(litemark_flowchart_tests
+        tests/flowchart_tests.cpp
+        src/core/flow/Flowchart.cpp
+    )
+    target_include_directories(litemark_flowchart_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_flowchart_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME flowchart_whitelist COMMAND litemark_flowchart_tests)
+
+    add_executable(litemark_markdown_requirements_tests
+        tests/markdown_requirements_tests.cpp
+        src/core/flow/Flowchart.cpp
+        src/core/parser/MarkdownParser.cpp
+    )
+    target_include_directories(litemark_markdown_requirements_tests PRIVATE
+        src
+        ${MD4C_INCLUDE_DIR}
+    )
+    target_link_libraries(litemark_markdown_requirements_tests PRIVATE
+        ${MD4C_STATIC_LIBRARY}
+    )
+    if(MINGW)
+        target_link_options(litemark_markdown_requirements_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME markdown_requirements
+        COMMAND litemark_markdown_requirements_tests)
+
+    add_executable(litemark_file_loading_tests
+        tests/file_loading_tests.cpp
+        src/core/flow/Flowchart.cpp
+        src/core/parser/MarkdownParser.cpp
+        src/session/TabManager.cpp
+    )
+    target_include_directories(litemark_file_loading_tests PRIVATE
+        src
+        ${MD4C_INCLUDE_DIR}
+    )
+    target_link_libraries(litemark_file_loading_tests PRIVATE
+        wxWidgets::base
+        ${MD4C_STATIC_LIBRARY}
+    )
+    if(MINGW)
+        target_link_options(litemark_file_loading_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME file_loading_encoding COMMAND litemark_file_loading_tests)
+
+    add_executable(litemark_theme_controller_tests
+        tests/theme_controller_tests.cpp
+        src/ui/ThemeController.cpp
+    )
+    target_include_directories(litemark_theme_controller_tests PRIVATE src)
+    target_link_libraries(litemark_theme_controller_tests PRIVATE
+        wxWidgets::core
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_theme_controller_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME theme_controller COMMAND litemark_theme_controller_tests)
+
+    set_tests_properties(
+        pending_scroll_state
+        parser_smoke
+        tab_manager_state
+        resource_policy
+        flowchart_whitelist
+        markdown_requirements
+        file_loading_encoding
+        theme_controller
+        PROPERTIES LABELS "unit"
+    )
 endif()

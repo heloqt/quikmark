@@ -1,8 +1,10 @@
 #include "ui/DocumentView.h"
 
 #include "core/flow/Flowchart.h"
+#include "core/policy/ResourcePolicy.h"
 #include "platform/windows/ImageDownloader.h"
 #include "platform/windows/PerformanceTrace.h"
+#include "ui/PendingScroll.h"
 
 #include <wx/app.h>
 #include <wx/bitmap.h>
@@ -32,6 +34,7 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -460,16 +463,15 @@ enum class ExternalLinkResult {
 };
 
 ExternalLinkResult OpenExternalLink(const wxString& href) {
-    const int colon = href.Find(':');
-    if (colon <= 0) {
-        return ExternalLinkResult::Unsupported;
-    }
-
-    const wxString scheme = href.Left(colon).Lower();
+    const wxScopedCharBuffer utf8 = href.ToUTF8();
+    const litemark::ResourceReferenceKind kind =
+        litemark::ClassifyResourceReference(
+        std::string_view(utf8.data(), utf8.length()));
     bool opened = false;
-    if (scheme == "http" || scheme == "https") {
+    if (kind == litemark::ResourceReferenceKind::Http ||
+        kind == litemark::ResourceReferenceKind::Https) {
         opened = wxLaunchDefaultBrowser(href);
-    } else if (scheme == "mailto") {
+    } else if (kind == litemark::ResourceReferenceKind::Mailto) {
         opened = wxLaunchDefaultApplication(href);
     } else {
         return ExternalLinkResult::Unsupported;
@@ -508,7 +510,7 @@ struct DocumentView::Impl {
     std::shared_ptr<ViewLayout> layout;
     bool layoutDirty = true;
     int layoutWidth = 0;
-    int pendingScrollY = 0;
+    PendingScrollPosition pendingScrollY;
     double fontScale = 1.0;
     double zoomWheelAccumulator = 0.0;
     FontMap fonts;
@@ -668,16 +670,16 @@ struct DocumentView::Impl {
             return resolved;
         }
         const wxString text = wxString::FromUTF8(source);
-        const wxString lower = text.Lower();
-        if (lower.StartsWith("http://") || lower.StartsWith("https://")) {
+        const ResourceReferenceKind referenceKind =
+            ClassifyResourceReference(source);
+        if (IsRemoteResource(referenceKind)) {
             resolved.key = text;
             resolved.url = text;
             resolved.remote = true;
             resolved.valid = true;
             return resolved;
         }
-        if (lower.Contains("://") || lower.StartsWith("data:") ||
-            lower.StartsWith("file:") || lower.StartsWith("ftp:")) {
+        if (referenceKind != ResourceReferenceKind::LocalOrRelative) {
             return resolved;
         }
         if (basePath.empty()) {
@@ -710,9 +712,10 @@ struct DocumentView::Impl {
         if (!source.remote) {
             wxFileName fileName(source.localPath);
             const wxString extension = fileName.GetExt().Lower();
-            if (extension != "png" && extension != "jpg" &&
-                extension != "jpeg" && extension != "bmp" &&
-                extension != "gif") {
+            const wxScopedCharBuffer extensionUtf8 = extension.ToUTF8();
+            if (!IsSupportedImageExtension(
+                    std::string_view(extensionUtf8.data(),
+                                     extensionUtf8.length()))) {
                 failedImages.insert(source.key);
                 return;
             }
@@ -1984,7 +1987,7 @@ void DocumentView::ShowPlaceholder() {
         "这是一个只读 Markdown 阅读器。\n"
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
     impl_->layoutDirty = true;
-    impl_->pendingScrollY = 0;
+    impl_->pendingScrollY.Request(0);
     Refresh();
 }
 
@@ -1995,7 +1998,7 @@ void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
     impl_->messageTitle = title;
     impl_->messageBody = body;
     impl_->layoutDirty = true;
-    impl_->pendingScrollY = 0;
+    impl_->pendingScrollY.Request(0);
     Refresh();
 }
 
@@ -2020,7 +2023,7 @@ void DocumentView::SetDocument(
     } else {
         impl_->layoutDirty = true;
     }
-    impl_->pendingScrollY = std::max(0, scrollY);
+    impl_->pendingScrollY.Request(scrollY);
     Refresh();
 }
 
@@ -2052,7 +2055,7 @@ void DocumentView::OnImageLoaded(wxThreadEvent& event) {
     }
 
     if (impl_->document) {
-        impl_->pendingScrollY = ScrollY();
+        impl_->pendingScrollY.Request(ScrollY());
         impl_->layoutDirty = true;
         impl_->layout.reset();
         impl_->layoutCache.erase(impl_->document.get());
@@ -2073,7 +2076,7 @@ void DocumentView::OnFlowchartLoaded(wxThreadEvent& event) {
     }
 
     if (impl_->document) {
-        impl_->pendingScrollY = ScrollY();
+        impl_->pendingScrollY.Request(ScrollY());
         impl_->layoutDirty = true;
         impl_->layout.reset();
         impl_->layoutCache.erase(impl_->document.get());
@@ -2134,7 +2137,7 @@ void DocumentView::OnMouseWheel(wxMouseEvent& event) {
         int x = 0;
         int y = 0;
         GetViewStart(&x, &y);
-        impl_->pendingScrollY = y;
+        impl_->pendingScrollY.Request(y);
         impl_->fontScale = nextScale;
         impl_->fonts.clear();
         impl_->layoutCache.clear();
@@ -2311,10 +2314,8 @@ void DocumentView::OnPaint(wxPaintEvent&) {
 
     const int totalHeight = impl_->TotalHeight() + pageMargin * 2;
     SetVirtualSize(wxSize(client.x, std::max(client.y, totalHeight)));
-    if (impl_->pendingScrollY > 0) {
-        const int target = impl_->pendingScrollY;
-        impl_->pendingScrollY = 0;
-        CallAfter([this, target]() { Scroll(0, target); });
+    if (const auto target = impl_->pendingScrollY.Take()) {
+        CallAfter([this, target]() { Scroll(0, *target); });
     }
 
     if (paintStart) {
