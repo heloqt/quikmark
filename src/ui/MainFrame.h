@@ -2,6 +2,7 @@
 
 #include "session/TabManager.h"
 #include "session/WorkspaceState.h"
+#include "core/document/DocumentSearch.h"
 #include "ui/ThemeController.h"
 
 #include <wx/frame.h>
@@ -27,6 +28,7 @@ class wxPanel;
 class wxStaticText;
 class wxSysColourChangedEvent;
 class wxSizeEvent;
+class wxTextCtrl;
 class wxThreadEvent;
 class wxTimerEvent;
 
@@ -58,6 +60,13 @@ private:
         ID_RECENT_FIRST,
         ID_RECENT_LAST = ID_RECENT_FIRST + 4,
         ID_OUTLINE_LIST,
+        ID_FIND,
+        ID_FIND_TEXT,
+        ID_FIND_NEXT,
+        ID_FIND_PREVIOUS,
+        ID_FIND_CLOSE,
+        ID_FIND_TIMER,
+        ID_SEARCH_COMPLETED,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -70,7 +79,13 @@ private:
         std::uint64_t generation = 0;
     };
 
+    struct SearchTask {
+        std::thread thread;
+        std::shared_ptr<std::atomic_bool> cancelled;
+    };
+
     void CreateMenuBar();
+    void CreateFindBar();
     void CreateOutlinePanel();
     void SetOutlineVisible(bool visible);
     void LayoutOutlinePanel();
@@ -115,6 +130,19 @@ private:
     void OnCopy(wxCommandEvent& event);
     void OnSelectAll(wxCommandEvent& event);
     void OnSystemColourChanged(wxSysColourChangedEvent& event);
+    void OnFind(wxCommandEvent& event);
+    void OnFindText(wxCommandEvent& event);
+    void OnFindEnter(wxCommandEvent& event);
+    void OnFindNext(wxCommandEvent& event);
+    void OnFindPrevious(wxCommandEvent& event);
+    void OnFindClose(wxCommandEvent& event);
+    void OnFindTimer(wxTimerEvent& event);
+    void OnSearchCompleted(wxThreadEvent& event);
+    void ShowFindBar();
+    void HideFindBar();
+    void StartSearch();
+    void CancelSearchTasks();
+    void ShowCurrentSearchMatch();
 
     ThemeController& theme_;
     std::unique_ptr<WorkspaceStore> workspaceStore_;
@@ -127,12 +155,22 @@ private:
     DocumentView* documentView_ = nullptr;
     wxPanel* changeBanner_ = nullptr;
     wxStaticText* changeText_ = nullptr;
+    wxPanel* findBar_ = nullptr;
+    wxTextCtrl* findText_ = nullptr;
+    wxStaticText* findStatus_ = nullptr;
     wxPanel* outlinePanel_ = nullptr;
     wxBoxSizer* contentSizer_ = nullptr;
     OutlineList* outlineList_ = nullptr;
     wxStaticText* outlineEmptyText_ = nullptr;
     bool updatingOutline_ = false;
     wxMenu* recentMenu_ = nullptr;
+    wxTimer findTimer_;
+    std::vector<std::unique_ptr<SearchTask>> searchTasks_;
+    std::vector<SearchMatch> searchMatches_;
+    int searchMatchIndex_ = -1;
+    std::uint64_t searchToken_ = 0;
+    std::string activeSearchQuery_;
+    bool searchResultTruncated_ = false;
     std::vector<std::unique_ptr<ParseTask>> parseTasks_;
     std::map<std::uint64_t, std::chrono::steady_clock::time_point>
         parseStartTimes_;

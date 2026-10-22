@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/document/DocumentNavigation.h"
+#include "core/document/DocumentSearch.h"
 #include "core/model/Block.h"
 #include "ui/ThemeController.h"
 
@@ -40,6 +41,9 @@ public:
     bool CopySelectionToClipboard();
     std::vector<HeadingAnchor> OutlineHeadings();
     bool ScrollToAnchor(const wxString& reference);
+    void SetSearchMatches(const std::vector<SearchMatch>& matches,
+                          int activeIndex);
+    void ClearSearchMatches();
     void ApplyTheme(const ThemePalette& palette);
 
 private:

@@ -44,8 +44,13 @@ public static class P2RegressionNative {
     [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int position);
     [DllImport("user32.dll")] public static extern int GetMenuItemID(IntPtr menu, int position);
+    [DllImport("user32.dll")] public static extern int GetMenuItemCount(IntPtr menu);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint item, System.Text.StringBuilder text, int count, uint flags);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr hWnd, string text);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hWnd);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int count);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
 }
@@ -164,6 +169,44 @@ function Send-MenuCommand(
     [void][P2RegressionNative]::SendMessage(
         $Window, 0x0111, [IntPtr]$id, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 150
+}
+
+function Get-MenuText([IntPtr]$Menu, [int]$Position) {
+    $text = [Text.StringBuilder]::new(256)
+    [void][P2RegressionNative]::GetMenuString(
+        $Menu, [uint32]$Position, $text, 256, 0x00000400)
+    return $text.ToString()
+}
+
+function Get-VisibleEditControl([IntPtr]$Parent) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][P2RegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        $name = [Text.StringBuilder]::new(128)
+        [void][P2RegressionNative]::GetClassName($handle, $name, 128)
+        if ($name.ToString() -eq 'Edit' -and
+            [P2RegressionNative]::IsWindowVisible($handle)) {
+            [void]$items.Add($handle)
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return $items | Select-Object -First 1
+}
+
+function Get-VisibleWindowTexts([IntPtr]$Parent) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][P2RegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        if ([P2RegressionNative]::IsWindowVisible($handle)) {
+            $text = [Text.StringBuilder]::new(512)
+            [void][P2RegressionNative]::GetWindowText($handle, $text, 512)
+            if ($text.Length -gt 0) {
+                [void]$items.Add($text.ToString())
+            }
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return @($items)
 }
 
 function Send-CtrlKey([byte]$Key) {
@@ -292,13 +335,36 @@ $selectionProcess = Start-Process -FilePath $Exe -ArgumentList $selectionFile -P
 try {
     Wait-Title $selectionProcess "selection.md*"
     Start-Sleep -Milliseconds 700
+    $mainMenu = [P2RegressionNative]::GetMenu(
+        $selectionProcess.MainWindowHandle)
+    $topMenuCount = [P2RegressionNative]::GetMenuItemCount($mainMenu)
+    if ($topMenuCount -ne 2) {
+        throw "Expected only File and View top-level menus."
+    }
+    $fileMenu = [P2RegressionNative]::GetSubMenu($mainMenu, 0)
+    $viewMenu = [P2RegressionNative]::GetSubMenu($mainMenu, 1)
+    $fileLabels = @(for ($i = 0;
+                       $i -lt [P2RegressionNative]::GetMenuItemCount($fileMenu);
+                       ++$i) { Get-MenuText $fileMenu $i })
+    $viewLabels = @(for ($i = 0;
+                       $i -lt [P2RegressionNative]::GetMenuItemCount($viewMenu);
+                       ++$i) { Get-MenuText $viewMenu $i })
+    if ($fileLabels -match '关闭当前 Tab' -or
+        $viewLabels -match '上一个 Tab' -or
+        $viewLabels -match '下一个 Tab') {
+        throw "Hidden tab menu entry is still visible."
+    }
+    if (-not ($viewLabels -match '查找')) {
+        throw "Find menu entry is missing. View items: $($viewLabels -join ' | ')"
+    }
     $document = Get-LargestChild $selectionProcess.MainWindowHandle
     Send-MouseDrag $document.Handle 35 45 520 250
     $screenshot = Join-Path $projectRoot "build\p2-selection.png"
     Save-WindowScreenshot $selectionProcess.MainWindowHandle $screenshot
     $selectionPixels = Count-ColorPixels $screenshot `
         ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
-    Send-MenuCommand $selectionProcess.MainWindowHandle 1 0
+    [void][P2RegressionNative]::SendMessage(
+        $document.Handle, 0x0301, [IntPtr]::Zero, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 250
     $copied = Get-Clipboard -Raw
     if ($copied -notlike "*Selection Start*" -or
@@ -306,20 +372,32 @@ try {
         $copied -like "*# Selection Start*") {
         throw "Cross-block plain-text copy failed. Clipboard: $copied"
     }
-    Send-MenuCommand $selectionProcess.MainWindowHandle 1 1
-    $selectAllScreenshot = Join-Path $projectRoot "build\p2-selection-all.png"
-    Save-WindowScreenshot $selectionProcess.MainWindowHandle `
-        $selectAllScreenshot
-    $selectAllPixels = Count-ColorPixels $selectAllScreenshot `
-        ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
-    if ($selectAllPixels -lt 100) {
-        throw "Select-all highlight was not visible."
+
+    Focus-Window $selectionProcess.MainWindowHandle $document.Handle
+    Send-CtrlKey 0x46
+    Start-Sleep -Milliseconds 200
+    $findEdit = Get-VisibleEditControl $selectionProcess.MainWindowHandle
+    if ($findEdit -eq $null) {
+        throw "Find bar did not open."
     }
-    Send-MenuCommand $selectionProcess.MainWindowHandle 1 0
-    $copiedAll = Get-Clipboard -Raw
-    if ($copiedAll -notlike "*Selection Start*" -or
-        $copiedAll -notlike "*Selection filler paragraph 40*") {
-        throw "Select-all copy failed."
+    [void][P2RegressionNative]::SetWindowText($findEdit, "")
+    foreach ($character in "Selection filler paragraph 35".ToCharArray()) {
+        [void][P2RegressionNative]::SendMessage(
+            $findEdit, 0x0102, [IntPtr][int]$character, [IntPtr]::Zero)
+    }
+    Start-Sleep -Milliseconds 800
+    $document = Get-LargestChild $selectionProcess.MainWindowHandle
+    $findScroll = Get-VerticalScroll $document.Handle
+    if ($findScroll -le 0) {
+        throw "Search did not scroll to the matching content."
+    }
+    $searchScreenshot = Join-Path $projectRoot "build\p2-search.png"
+    Save-WindowScreenshot $selectionProcess.MainWindowHandle $searchScreenshot
+    $searchPixels = Count-ColorPixels $searchScreenshot `
+        ([System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x66))
+    if ($searchPixels -lt 20) {
+        $texts = Get-VisibleWindowTexts $selectionProcess.MainWindowHandle
+        throw "Active search match highlight was not visible. Texts: $($texts -join ' | ')"
     }
 } finally {
     if ($selectionProcess -and -not $selectionProcess.HasExited) {
@@ -347,7 +425,7 @@ try {
         $document.Handle, [ref]$documentRectBefore)
     $documentWidthBefore =
         $documentRectBefore.Right - $documentRectBefore.Left
-    Send-MenuCommand $anchorProcess.MainWindowHandle 2 4
+    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
     $outlineList = Get-VisibleListBox $anchorProcess.MainWindowHandle
     if ($outlineList -eq $null) {
         throw "Outline list was not visible after opening the drawer."
@@ -387,7 +465,7 @@ try {
     if ($outlinePosition -le 0) {
         throw "Outline item click did not scroll the document."
     }
-    Send-MenuCommand $anchorProcess.MainWindowHandle 2 4
+    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
     if ([P2RegressionNative]::IsWindowVisible($outlineList)) {
         throw "Outline drawer did not close."
     }
@@ -413,7 +491,7 @@ try {
         $workspaceProcess.MainWindowHandle, [IntPtr]::Zero,
         80, 70, 1000, 720, 0x0014)
     Start-Sleep -Milliseconds 300
-    Send-MenuCommand $workspaceProcess.MainWindowHandle 2 4
+    Send-MenuCommand $workspaceProcess.MainWindowHandle 1 4
     Start-Sleep -Milliseconds 200
     if ((Get-VisibleListBox $workspaceProcess.MainWindowHandle) -eq $null) {
         throw "Outline was not persistent before saving workspace state."
@@ -473,6 +551,12 @@ try {
     if ([math]::Abs($restoredSelectionScroll - $savedSelectionScroll) -gt 50) {
         throw "Restored scroll was $restoredSelectionScroll, expected $savedSelectionScroll."
     }
+    Focus-Window $restoredProcess.MainWindowHandle
+    Send-CtrlKey 0x57
+    Wait-Title $restoredProcess "anchor.md*"
+    if ($restoredProcess.HasExited) {
+        throw "Ctrl+W closed the application instead of the current tab."
+    }
 } finally {
     if ($restoredProcess -and -not $restoredProcess.HasExited) {
         Stop-Process -Id $restoredProcess.Id -Force
@@ -495,7 +579,7 @@ $outlineWheelProcess = Start-Process -FilePath $Exe `
 try {
     Wait-Title $outlineWheelProcess "*03-设计文档.md*"
     Start-Sleep -Milliseconds 800
-    Send-MenuCommand $outlineWheelProcess.MainWindowHandle 2 4
+    Send-MenuCommand $outlineWheelProcess.MainWindowHandle 1 4
     $largeOutlineList = Get-VisibleListBox $outlineWheelProcess.MainWindowHandle
     if ($largeOutlineList -eq $null) {
         throw "Large document outline did not open."
@@ -538,7 +622,7 @@ try {
 [pscustomobject]@{
     CrossBlockCopy = "PASS"
     DragHighlightPixels = $selectionPixels
-    SelectAllHighlightPixels = $selectAllPixels
+    SearchHighlightPixels = $searchPixels
     InternalAnchorClick = "PASS ($anchorPosition px)"
     OutlineSidebar = "PASS ($outlineCount items, $([math]::Round($outlineRatio * 100))%)"
     OutlineBodyReflow = "PASS ($documentWidthBefore -> $documentWidthAfter -> $documentWidthRestored)"
@@ -548,5 +632,6 @@ try {
     RecentFiles = "2"
     RestoredWindowWidth = $restoredWindowWidth
     RestoredScroll = $restoredSelectionScroll
+    HiddenMenuShortcuts = "PASS"
     Result = "PASS"
 } | Format-List

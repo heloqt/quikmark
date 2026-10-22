@@ -1,5 +1,6 @@
 #include "ui/MainFrame.h"
 
+#include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
 #include "platform/windows/PerformanceTrace.h"
 #include "platform/windows/FileAssociation.h"
@@ -9,6 +10,7 @@
 
 #include <wx/dnd.h>
 #include <wx/button.h>
+#include <wx/accel.h>
 #include <wx/display.h>
 #include <wx/event.h>
 #include <wx/filedlg.h>
@@ -18,6 +20,7 @@
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
+#include <wx/textctrl.h>
 #include <wx/timer.h>
 #include <wx/utils.h>
 
@@ -43,6 +46,14 @@ struct ParseCompletion {
     wxString content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
+};
+
+struct SearchCompletion {
+    std::uint64_t token = 0;
+    std::uint64_t tabId = 0;
+    std::uint64_t generation = 0;
+    std::string query;
+    litemark::DocumentSearchResult result;
 };
 
 class MainFrameDropTarget : public wxFileDropTarget {
@@ -94,6 +105,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
                      wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(8));
     changeBanner_->SetSizer(bannerSizer);
     changeBanner_->Hide();
+    CreateFindBar();
 
     documentView_ = new DocumentView(this);
     CreateOutlinePanel();
@@ -104,6 +116,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(tabStrip_, 0, wxEXPAND);
     sizer->Add(changeBanner_, 0, wxEXPAND);
+    sizer->Add(findBar_, 0, wxEXPAND);
     sizer->Add(contentSizer_, 1, wxEXPAND);
     SetSizer(sizer);
 
@@ -117,6 +130,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
 
     fileWatcher_.SetOwner(this);
     changeTimer_.SetOwner(this, ID_CHANGE_TIMER);
+    findTimer_.SetOwner(this, ID_FIND_TIMER);
 
     BindEvents();
     ApplyTheme();
@@ -131,6 +145,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
 }
 
 MainFrame::~MainFrame() {
+    CancelSearchTasks();
     for (auto& task : parseTasks_) {
         if (task->cancelled) {
             task->cancelled->store(true);
@@ -353,15 +368,10 @@ void MainFrame::CreateMenuBar() {
     recentMenu_ = new wxMenu();
     fileMenu->AppendSubMenu(recentMenu_, U8("最近打开"));
     fileMenu->Append(ID_RELOAD, U8("重新加载\tCtrl+R"));
-    fileMenu->Append(ID_CLOSE_TAB, U8("关闭当前 Tab\tCtrl+W"));
     fileMenu->AppendSeparator();
     fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION, U8("注册文件关联..."));
     fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, U8("退出"));
-
-    auto* editMenu = new wxMenu();
-    editMenu->Append(wxID_COPY, U8("复制\tCtrl+C"));
-    editMenu->Append(wxID_SELECTALL, U8("全选\tCtrl+A"));
 
     auto* appearanceMenu = new wxMenu();
     appearanceMenu->AppendRadioItem(ID_APPEARANCE_SYSTEM,
@@ -372,17 +382,252 @@ void MainFrame::CreateMenuBar() {
                                      ThemeController::DisplayName(ThemeMode::Dark));
 
     auto* viewMenu = new wxMenu();
+    viewMenu->Append(ID_FIND, U8("查找...\tCtrl+F"));
+    viewMenu->AppendSeparator();
     viewMenu->AppendSubMenu(appearanceMenu, U8("外观"));
-    viewMenu->Append(ID_NEXT_TAB, U8("下一个 Tab\tCtrl+Tab"));
-    viewMenu->Append(ID_PREVIOUS_TAB, U8("上一个 Tab\tCtrl+Shift+Tab"));
     viewMenu->AppendSeparator();
     viewMenu->AppendCheckItem(ID_OUTLINE, U8("目录"));
 
     auto* menuBar = new wxMenuBar();
     menuBar->Append(fileMenu, U8("文件"));
-    menuBar->Append(editMenu, U8("编辑"));
     menuBar->Append(viewMenu, U8("查看"));
     SetMenuBar(menuBar);
+
+    wxAcceleratorEntry accelerators[6];
+    accelerators[0].Set(wxACCEL_CTRL, 'W', ID_CLOSE_TAB);
+    accelerators[1].Set(wxACCEL_CTRL, WXK_TAB, ID_NEXT_TAB);
+    accelerators[2].Set(wxACCEL_CTRL | wxACCEL_SHIFT, WXK_TAB,
+                        ID_PREVIOUS_TAB);
+    accelerators[3].Set(wxACCEL_CTRL, 'F', ID_FIND);
+    accelerators[4].Set(wxACCEL_NORMAL, WXK_F3, ID_FIND_NEXT);
+    accelerators[5].Set(wxACCEL_SHIFT, WXK_F3, ID_FIND_PREVIOUS);
+    SetAcceleratorTable(wxAcceleratorTable(6, accelerators));
+}
+
+void MainFrame::CreateFindBar() {
+    findBar_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
+                           FromDIP(wxSize(-1, 38)));
+    auto* label = new wxStaticText(findBar_, wxID_ANY, U8("查找"));
+    findText_ = new wxTextCtrl(
+        findBar_, ID_FIND_TEXT, wxString(), wxDefaultPosition,
+        FromDIP(wxSize(300, -1)), wxTE_PROCESS_ENTER);
+    findText_->SetHint(U8("输入要查找的内容"));
+    auto* previous = new wxButton(
+        findBar_, ID_FIND_PREVIOUS, U8("↑"), wxDefaultPosition,
+        wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
+    auto* next = new wxButton(
+        findBar_, ID_FIND_NEXT, U8("↓"), wxDefaultPosition,
+        wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
+    findStatus_ = new wxStaticText(
+        findBar_, wxID_ANY, U8("输入内容后开始查找"),
+        wxDefaultPosition, FromDIP(wxSize(150, -1)), wxST_ELLIPSIZE_END);
+    auto* close = new wxButton(
+        findBar_, ID_FIND_CLOSE, U8("×"), wxDefaultPosition,
+        wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
+
+    auto* sizer = new wxBoxSizer(wxHORIZONTAL);
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(12));
+    sizer->Add(findText_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+    sizer->Add(previous, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(6));
+    sizer->Add(next, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
+    sizer->Add(findStatus_, 1,
+               wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(10));
+    sizer->Add(close, 0,
+               wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    findBar_->SetSizer(sizer);
+    findBar_->Hide();
+
+    findText_->Bind(wxEVT_TEXT, &MainFrame::OnFindText, this);
+    findText_->Bind(wxEVT_TEXT_ENTER, &MainFrame::OnFindEnter, this);
+}
+
+void MainFrame::ShowFindBar() {
+    if (findBar_ == nullptr) {
+        return;
+    }
+    findBar_->Show();
+    Layout();
+    LayoutOutlinePanel();
+    findText_->SetFocus();
+    findText_->SelectAll();
+}
+
+void MainFrame::HideFindBar() {
+    if (findBar_ == nullptr) {
+        return;
+    }
+    findTimer_.Stop();
+    CancelSearchTasks();
+    ++searchToken_;
+    searchMatches_.clear();
+    searchMatchIndex_ = -1;
+    searchResultTruncated_ = false;
+    documentView_->ClearSearchMatches();
+    findBar_->Hide();
+    Layout();
+    LayoutOutlinePanel();
+    documentView_->SetFocus();
+}
+
+void MainFrame::CancelSearchTasks() {
+    for (auto& task : searchTasks_) {
+        if (task->cancelled) {
+            task->cancelled->store(true);
+        }
+    }
+    for (auto& task : searchTasks_) {
+        if (task->thread.joinable()) {
+            task->thread.join();
+        }
+    }
+    searchTasks_.clear();
+}
+
+void MainFrame::StartSearch() {
+    CancelSearchTasks();
+    const std::uint64_t token = ++searchToken_;
+    const wxString query = findText_->GetValue();
+    const wxScopedCharBuffer queryUtf8 = query.ToUTF8();
+    activeSearchQuery_.assign(queryUtf8.data(), queryUtf8.length());
+    searchMatches_.clear();
+    searchMatchIndex_ = -1;
+    searchResultTruncated_ = false;
+    documentView_->ClearSearchMatches();
+
+    if (query.empty()) {
+        findStatus_->SetLabel(U8("输入内容后开始查找"));
+        return;
+    }
+    const TabSession* current = tabs_.selected();
+    if (current == nullptr || !current->document) {
+        findStatus_->SetLabel(U8("当前文档尚未就绪"));
+        return;
+    }
+
+    const auto document = current->document;
+    const std::uint64_t tabId = current->id;
+    const std::uint64_t generation = current->generation;
+    findStatus_->SetLabel(U8("查找中…"));
+    auto task = std::make_unique<SearchTask>();
+    task->cancelled = std::make_shared<std::atomic_bool>(false);
+    const auto cancelled = task->cancelled;
+    SearchTask* rawTask = task.get();
+    searchTasks_.push_back(std::move(task));
+    rawTask->thread = std::thread(
+        [this, document, query = activeSearchQuery_, token, tabId,
+         generation, cancelled]() {
+            DocumentSearchResult result =
+                FindDocumentText(*document, query, 10000, cancelled.get());
+            if (cancelled->load(std::memory_order_relaxed)) {
+                return;
+            }
+            auto* event =
+                new wxThreadEvent(wxEVT_THREAD, ID_SEARCH_COMPLETED);
+            event->SetPayload(SearchCompletion{
+                token, tabId, generation, query, std::move(result)});
+            wxQueueEvent(this, event);
+        });
+}
+
+void MainFrame::ShowCurrentSearchMatch() {
+    if (searchMatches_.empty() || searchMatchIndex_ < 0) {
+        documentView_->ClearSearchMatches();
+        findStatus_->SetLabel(U8("无结果"));
+        return;
+    }
+    documentView_->SetSearchMatches(searchMatches_, searchMatchIndex_);
+    wxString status = wxString::Format(
+        "%d / %zu", searchMatchIndex_ + 1, searchMatches_.size());
+    if (searchResultTruncated_) {
+        status += U8("（已截断）");
+    }
+    findStatus_->SetLabel(status);
+}
+
+void MainFrame::OnFind(wxCommandEvent&) {
+    ShowFindBar();
+    if (!activeSearchQuery_.empty()) {
+        StartSearch();
+    }
+}
+
+void MainFrame::OnFindText(wxCommandEvent&) {
+    findTimer_.Stop();
+    CancelSearchTasks();
+    ++searchToken_;
+    searchMatches_.clear();
+    searchMatchIndex_ = -1;
+    documentView_->ClearSearchMatches();
+    findStatus_->SetLabel(U8("等待输入…"));
+    findTimer_.StartOnce(140);
+}
+
+void MainFrame::OnFindEnter(wxCommandEvent&) {
+    findTimer_.Stop();
+    const wxScopedCharBuffer query = findText_->GetValue().ToUTF8();
+    const std::string current(query.data(), query.length());
+    if (current != activeSearchQuery_ || searchMatches_.empty()) {
+        StartSearch();
+        return;
+    }
+    searchMatchIndex_ =
+        (searchMatchIndex_ + 1) % static_cast<int>(searchMatches_.size());
+    ShowCurrentSearchMatch();
+}
+
+void MainFrame::OnFindNext(wxCommandEvent&) {
+    if (findBar_ != nullptr && !findBar_->IsShown()) {
+        ShowFindBar();
+    }
+    if (searchMatches_.empty()) {
+        StartSearch();
+        return;
+    }
+    searchMatchIndex_ =
+        (searchMatchIndex_ + 1) % static_cast<int>(searchMatches_.size());
+    ShowCurrentSearchMatch();
+}
+
+void MainFrame::OnFindPrevious(wxCommandEvent&) {
+    if (findBar_ != nullptr && !findBar_->IsShown()) {
+        ShowFindBar();
+    }
+    if (searchMatches_.empty()) {
+        StartSearch();
+        return;
+    }
+    const int count = static_cast<int>(searchMatches_.size());
+    searchMatchIndex_ =
+        (searchMatchIndex_ + count - 1) % count;
+    ShowCurrentSearchMatch();
+}
+
+void MainFrame::OnFindClose(wxCommandEvent&) {
+    HideFindBar();
+}
+
+void MainFrame::OnFindTimer(wxTimerEvent&) {
+    StartSearch();
+}
+
+void MainFrame::OnSearchCompleted(wxThreadEvent& event) {
+    const SearchCompletion completion =
+        event.GetPayload<SearchCompletion>();
+    CancelSearchTasks();
+    if (completion.token != searchToken_ || findBar_ == nullptr ||
+        !findBar_->IsShown()) {
+        return;
+    }
+    const TabSession* current = tabs_.selected();
+    if (current == nullptr || current->id != completion.tabId ||
+        current->generation != completion.generation ||
+        completion.query != activeSearchQuery_) {
+        return;
+    }
+    searchMatches_ = completion.result.matches;
+    searchResultTruncated_ = completion.result.truncated;
+    searchMatchIndex_ = searchMatches_.empty() ? -1 : 0;
+    ShowCurrentSearchMatch();
 }
 
 void MainFrame::CreateOutlinePanel() {
@@ -426,9 +671,16 @@ void MainFrame::BindEvents() {
          ID_RECENT_LAST);
     Bind(wxEVT_MENU, &MainFrame::OnOutline, this, ID_OUTLINE);
     Bind(wxEVT_LISTBOX, &MainFrame::OnOutlineItem, this, ID_OUTLINE_LIST);
+    Bind(wxEVT_MENU, &MainFrame::OnFind, this, ID_FIND);
+    Bind(wxEVT_MENU, &MainFrame::OnFindNext, this, ID_FIND_NEXT);
+    Bind(wxEVT_MENU, &MainFrame::OnFindPrevious, this, ID_FIND_PREVIOUS);
+    Bind(wxEVT_MENU, &MainFrame::OnFindClose, this, ID_FIND_CLOSE);
     Bind(wxEVT_MENU, &MainFrame::OnCopy, this, wxID_COPY);
     Bind(wxEVT_MENU, &MainFrame::OnSelectAll, this, wxID_SELECTALL);
     Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);
+    Bind(wxEVT_BUTTON, &MainFrame::OnFindNext, this, ID_FIND_NEXT);
+    Bind(wxEVT_BUTTON, &MainFrame::OnFindPrevious, this, ID_FIND_PREVIOUS);
+    Bind(wxEVT_BUTTON, &MainFrame::OnFindClose, this, ID_FIND_CLOSE);
     Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         tabs_.DismissChangeNotice();
         UpdateChangeBanner();
@@ -438,7 +690,10 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_SYS_COLOUR_CHANGED, &MainFrame::OnSystemColourChanged, this);
     Bind(wxEVT_FSWATCHER, &MainFrame::OnFileChanged, this);
     Bind(wxEVT_TIMER, &MainFrame::OnChangeTimer, this, ID_CHANGE_TIMER);
+    Bind(wxEVT_TIMER, &MainFrame::OnFindTimer, this, ID_FIND_TIMER);
     Bind(wxEVT_THREAD, &MainFrame::OnParseCompleted, this, ID_PARSE_COMPLETED);
+    Bind(wxEVT_THREAD, &MainFrame::OnSearchCompleted, this,
+         ID_SEARCH_COMPLETED);
     Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnCloseWindow, this);
     Bind(wxEVT_CHAR_HOOK, &MainFrame::OnCharHook, this);
     Bind(wxEVT_SIZE, &MainFrame::OnFrameSize, this);
@@ -462,6 +717,16 @@ void MainFrame::ApplyTheme() {
         outlinePanel_->SetForegroundColour(palette.text);
         outlineList_->ApplyTheme(palette);
         outlineEmptyText_->SetForegroundColour(palette.mutedText);
+    }
+    if (findBar_ != nullptr) {
+        findBar_->SetBackgroundColour(palette.windowBackground);
+        for (wxWindow* child : findBar_->GetChildren()) {
+            child->SetBackgroundColour(palette.windowBackground);
+            child->SetForegroundColour(palette.text);
+        }
+        findText_->SetBackgroundColour(palette.documentBackground);
+        findText_->SetForegroundColour(palette.text);
+        findStatus_->SetForegroundColour(palette.mutedText);
     }
     UpdateAppearanceMenu();
     Refresh();
@@ -527,6 +792,15 @@ void MainFrame::UpdateFromTabs() {
     UpdateChangeBanner();
     Layout();
     UpdateOutline();
+    if (findBar_ != nullptr && findBar_->IsShown() &&
+        findText_ != nullptr && !findText_->IsEmpty()) {
+        searchMatches_.clear();
+        searchMatchIndex_ = -1;
+        searchResultTruncated_ = false;
+        documentView_->ClearSearchMatches();
+        findStatus_->SetLabel(U8("查找中…"));
+        findTimer_.StartOnce(30);
+    }
 }
 
 void MainFrame::UpdateChangeBanner() {
@@ -854,6 +1128,15 @@ void MainFrame::OnCloseWindow(wxCloseEvent& event) {
 }
 
 void MainFrame::OnCharHook(wxKeyEvent& event) {
+    if (event.GetKeyCode() == WXK_ESCAPE &&
+        findBar_ != nullptr && findBar_->IsShown()) {
+        HideFindBar();
+        return;
+    }
+    if (findText_ != nullptr && wxWindow::FindFocus() == findText_) {
+        event.Skip();
+        return;
+    }
     if (event.ControlDown()) {
         if (event.GetKeyCode() == 'A') {
             documentView_->SelectAll();

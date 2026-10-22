@@ -42,6 +42,7 @@ add_executable(litemark WIN32
     src/app/main.cpp
     src/core/flow/Flowchart.cpp
     src/core/document/DocumentNavigation.cpp
+    src/core/document/DocumentSearch.cpp
     src/core/document/DocumentText.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/windows/FileAssociation.cpp
@@ -267,6 +268,21 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME document_navigation COMMAND litemark_document_navigation_tests)
 
+    add_executable(litemark_document_search_tests
+        tests/document_search_tests.cpp
+        src/core/document/DocumentSearch.cpp
+        src/core/document/DocumentText.cpp
+    )
+    target_include_directories(litemark_document_search_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_document_search_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME document_search COMMAND litemark_document_search_tests)
+
     add_executable(litemark_workspace_state_tests
         tests/workspace_state_tests.cpp
         src/session/WorkspaceState.cpp
@@ -292,6 +308,7 @@ if(LITEMARK_BUILD_TESTS)
         theme_controller
         document_text_selection
         document_navigation
+        document_search
         workspace_state
         PROPERTIES LABELS "unit"
     )

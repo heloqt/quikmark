@@ -58,6 +58,18 @@ wxString U8(const char* text) {
     return wxString::FromUTF8(text);
 }
 
+bool IsDarkPalette(const litemark::ThemePalette& palette) {
+    return palette.documentBackground.Red() < 100;
+}
+
+wxColour SearchHighlightColour(const litemark::ThemePalette& palette,
+                               bool active) {
+    if (IsDarkPalette(palette)) {
+        return active ? wxColour("#7A5D00") : wxColour("#4A3B00");
+    }
+    return active ? wxColour("#FFD666") : wxColour("#FFF3B0");
+}
+
 std::size_t CountUtf8Characters(const std::string& text) {
     std::size_t count = 0;
     for (unsigned char value : text) {
@@ -600,6 +612,8 @@ struct DocumentView::Impl {
     bool headingAnchorsBuilt = false;
     std::optional<litemark::TextSelectionPoint> selectionAnchor;
     std::optional<litemark::TextSelectionPoint> selectionFocus;
+    std::vector<litemark::SearchMatch> searchMatches;
+    int activeSearchMatch = -1;
     bool selecting = false;
     bool selectionMoved = false;
     wxString pressedLink;
@@ -1568,6 +1582,34 @@ struct DocumentView::Impl {
         return std::make_pair(begin, end);
     }
 
+    std::vector<std::pair<std::size_t, std::size_t>>
+    SearchRangesForBlock(std::size_t blockIndex) const {
+        std::vector<std::pair<std::size_t, std::size_t>> ranges;
+        for (const auto& match : searchMatches) {
+            if (match.blockIndex == blockIndex) {
+                ranges.emplace_back(match.utf8Offset,
+                                    match.utf8Offset + match.utf8Length);
+            }
+        }
+        return ranges;
+    }
+
+    std::optional<std::pair<std::size_t, std::size_t>>
+    ActiveSearchRangeForBlock(std::size_t blockIndex) const {
+        if (activeSearchMatch < 0 ||
+            static_cast<std::size_t>(activeSearchMatch) >=
+                searchMatches.size()) {
+            return std::nullopt;
+        }
+        const SearchMatch& match =
+            searchMatches[static_cast<std::size_t>(activeSearchMatch)];
+        if (match.blockIndex != blockIndex) {
+            return std::nullopt;
+        }
+        return std::make_pair(match.utf8Offset,
+                              match.utf8Offset + match.utf8Length);
+    }
+
     std::optional<TextSelectionPoint> HitTestPosition(
         wxDC& dc, const wxPoint& point) {
         if (!document || document->blocks.empty()) {
@@ -1869,7 +1911,39 @@ struct DocumentView::Impl {
                         int baseY, bool blockCode,
                         const std::optional<std::pair<std::size_t,
                                                       std::size_t>>&
-                            selection = std::nullopt) {
+                            selection = std::nullopt,
+                        const std::vector<std::pair<std::size_t,
+                                                    std::size_t>>*
+                            searchRanges = nullptr,
+                        const std::optional<std::pair<std::size_t,
+                                                      std::size_t>>*
+                            activeSearch = nullptr) {
+        const wxColour searchColour =
+            SearchHighlightColour(palette, false);
+        const wxColour activeSearchColour =
+            SearchHighlightColour(palette, true);
+        auto drawRange = [&](const Segment& segment, int segmentX,
+                             int lineY, int lineHeight,
+                             const std::pair<std::size_t, std::size_t>& range,
+                             const wxColour& colour) {
+            if (segment.sourceEnd <= segment.sourceStart) {
+                return;
+            }
+            const std::size_t begin =
+                std::max(range.first, segment.sourceStart);
+            const std::size_t end =
+                std::min(range.second, segment.sourceEnd);
+            if (begin >= end) {
+                return;
+            }
+            const int x0 = XAtSourceOffset(dc, segment, begin);
+            const int x1 = XAtSourceOffset(dc, segment, end);
+            dc.SetPen(*wxTRANSPARENT_PEN);
+            dc.SetBrush(wxBrush(colour));
+            dc.DrawRectangle(segmentX + x0, lineY - 1,
+                             std::max(1, x1 - x0), lineHeight + 2);
+        };
+
         for (const Line& line : text.lines) {
             const int lineY = baseY + line.y;
             for (const Segment& segment : line.segments) {
@@ -1881,23 +1955,19 @@ struct DocumentView::Impl {
                     dc.DrawRectangle(segmentX - 2, lineY - 1,
                                      segment.width + 4, line.height + 2);
                 }
-                if (selection &&
-                    segment.sourceEnd > segment.sourceStart) {
-                    const std::size_t begin =
-                        std::max(selection->first, segment.sourceStart);
-                    const std::size_t end =
-                        std::min(selection->second, segment.sourceEnd);
-                    if (begin < end) {
-                        const int x0 =
-                            XAtSourceOffset(dc, segment, begin);
-                        const int x1 =
-                            XAtSourceOffset(dc, segment, end);
-                        dc.SetPen(*wxTRANSPARENT_PEN);
-                        dc.SetBrush(wxBrush(palette.selection));
-                        dc.DrawRectangle(segmentX + x0, lineY - 1,
-                                         std::max(1, x1 - x0),
-                                         line.height + 2);
+                if (searchRanges != nullptr) {
+                    for (const auto& range : *searchRanges) {
+                        drawRange(segment, segmentX, lineY, line.height,
+                                  range, searchColour);
                     }
+                }
+                if (activeSearch) {
+                    drawRange(segment, segmentX, lineY, line.height,
+                              **activeSearch, activeSearchColour);
+                }
+                if (selection) {
+                    drawRange(segment, segmentX, lineY, line.height,
+                              *selection, palette.selection);
                 }
                 if (segment.style.link) {
                     dc.SetTextForeground(palette.link);
@@ -1920,6 +1990,13 @@ struct DocumentView::Impl {
     void DrawBlock(wxDC& dc, const BlockLayout& item) {
         const Block& block = *item.block;
         const auto selection = SelectionForBlock(item.blockIndex);
+        const auto searchRanges = SearchRangesForBlock(item.blockIndex);
+        const auto activeSearch =
+            ActiveSearchRangeForBlock(item.blockIndex);
+        const auto* searchRangesPtr =
+            searchRanges.empty() ? nullptr : &searchRanges;
+        const auto* activeSearchPtr =
+            activeSearch ? &activeSearch : nullptr;
 
         if (block.quoteDepth > 0) {
             dc.SetPen(wxPen(palette.quoteBorder, 3));
@@ -1941,7 +2018,7 @@ struct DocumentView::Impl {
                 const int padding = std::max(6, item.height > 24 ? 10 : 6);
                 DrawTextLayout(dc, item.text, item.x + padding,
                                item.y + padding, true,
-                               selection);
+                               selection, searchRangesPtr, activeSearchPtr);
                 break;
             }
             case BlockKind::Table:
@@ -1963,7 +2040,7 @@ struct DocumentView::Impl {
                     dc.DrawText(item.marker, item.markerX, item.markerY);
                 }
                 DrawTextLayout(dc, item.text, item.x, item.y, false,
-                               selection);
+                               selection, searchRangesPtr, activeSearchPtr);
                 if (block.kind == BlockKind::Heading &&
                     block.headingLevel <= 2) {
                     dc.SetPen(wxPen(palette.border, 1));
@@ -1979,6 +2056,16 @@ struct DocumentView::Impl {
             block.kind != BlockKind::Code &&
             block.kind != BlockKind::Html) {
             dc.SetPen(wxPen(palette.accent, 2));
+            dc.SetBrush(*wxTRANSPARENT_BRUSH);
+            dc.DrawRectangle(item.x - 2, item.y - 2,
+                             item.width + 4, item.height + 4);
+        }
+        if (activeSearchPtr != nullptr &&
+            block.kind != BlockKind::Text &&
+            block.kind != BlockKind::Heading &&
+            block.kind != BlockKind::Code &&
+            block.kind != BlockKind::Html) {
+            dc.SetPen(wxPen(SearchHighlightColour(palette, true), 2));
             dc.SetBrush(*wxTRANSPARENT_BRUSH);
             dc.DrawRectangle(item.x - 2, item.y - 2,
                              item.width + 4, item.height + 4);
@@ -2296,6 +2383,8 @@ void DocumentView::ShowPlaceholder() {
     impl_->document.reset();
     impl_->headingAnchors.clear();
     impl_->headingAnchorsBuilt = false;
+    impl_->searchMatches.clear();
+    impl_->activeSearchMatch = -1;
     impl_->basePath.clear();
     impl_->messageTitle = U8("liteMark");
     impl_->messageBody = U8(
@@ -2314,6 +2403,8 @@ void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
     impl_->document.reset();
     impl_->headingAnchors.clear();
     impl_->headingAnchorsBuilt = false;
+    impl_->searchMatches.clear();
+    impl_->activeSearchMatch = -1;
     impl_->basePath.clear();
     impl_->messageTitle = title;
     impl_->messageBody = body;
@@ -2332,6 +2423,8 @@ void DocumentView::SetDocument(
     impl_->document = std::move(document);
     impl_->headingAnchors.clear();
     impl_->headingAnchorsBuilt = false;
+    impl_->searchMatches.clear();
+    impl_->activeSearchMatch = -1;
     impl_->basePath = basePath;
     impl_->messageTitle.clear();
     impl_->messageBody.clear();
@@ -2495,6 +2588,38 @@ bool DocumentView::ScrollToAnchor(const wxString& reference) {
     Scroll(0, std::max(0, y - FromDIP(10)));
     Refresh(false);
     return true;
+}
+
+void DocumentView::SetSearchMatches(
+    const std::vector<SearchMatch>& matches, int activeIndex) {
+    impl_->searchMatches = matches;
+    impl_->activeSearchMatch =
+        activeIndex >= 0 &&
+                static_cast<std::size_t>(activeIndex) < matches.size()
+            ? activeIndex
+            : -1;
+
+    if (impl_->activeSearchMatch >= 0 && impl_->document &&
+        impl_->layout) {
+        const SearchMatch& match = impl_->searchMatches[
+            static_cast<std::size_t>(impl_->activeSearchMatch)];
+        wxClientDC dc(this);
+        DoPrepareDC(dc);
+        int y = impl_->PageMargin(dc);
+        for (std::size_t index = 0; index < match.blockIndex &&
+                                    index < impl_->layout->slots.size();
+             ++index) {
+            y += impl_->SlotHeight(impl_->layout->slots[index]);
+        }
+        Scroll(0, std::max(0, y - GetClientSize().y / 4));
+    }
+    Refresh(false);
+}
+
+void DocumentView::ClearSearchMatches() {
+    impl_->searchMatches.clear();
+    impl_->activeSearchMatch = -1;
+    Refresh(false);
 }
 
 void DocumentView::ApplyTheme(const ThemePalette& palette) {
