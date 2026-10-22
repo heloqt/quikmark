@@ -28,4 +28,9 @@ if ($Integration) {
     if ($LASTEXITCODE -ne 0) {
         throw "UI integration regression failed"
     }
+    powershell -NoProfile -ExecutionPolicy Bypass `
+        -File .\scripts\p2-feature-regression.ps1 -Exe $exe
+    if ($LASTEXITCODE -ne 0) {
+        throw "P2 feature regression failed"
+    }
 }

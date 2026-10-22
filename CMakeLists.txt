@@ -41,6 +41,8 @@ add_executable(litemark WIN32
     src/app/litemark.rc
     src/app/main.cpp
     src/core/flow/Flowchart.cpp
+    src/core/document/DocumentNavigation.cpp
+    src/core/document/DocumentText.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/windows/FileAssociation.cpp
     src/platform/windows/ImageDownloader.cpp
@@ -48,6 +50,7 @@ add_executable(litemark WIN32
     src/platform/windows/PerformanceTrace.cpp
     src/platform/windows/SingletonGuard.cpp
     src/session/TabManager.cpp
+    src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
     src/ui/MainFrame.cpp
     src/ui/TabStrip.cpp
@@ -234,6 +237,49 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME theme_controller COMMAND litemark_theme_controller_tests)
 
+    add_executable(litemark_document_text_tests
+        tests/document_text_tests.cpp
+        src/core/document/DocumentText.cpp
+    )
+    target_include_directories(litemark_document_text_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_document_text_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
+
+    add_executable(litemark_document_navigation_tests
+        tests/document_navigation_tests.cpp
+        src/core/document/DocumentNavigation.cpp
+        src/core/document/DocumentText.cpp
+    )
+    target_include_directories(litemark_document_navigation_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_document_navigation_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME document_navigation COMMAND litemark_document_navigation_tests)
+
+    add_executable(litemark_workspace_state_tests
+        tests/workspace_state_tests.cpp
+        src/session/WorkspaceState.cpp
+    )
+    target_include_directories(litemark_workspace_state_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_workspace_state_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME workspace_state COMMAND litemark_workspace_state_tests)
+
     set_tests_properties(
         pending_scroll_state
         parser_smoke
@@ -243,6 +289,9 @@ if(LITEMARK_BUILD_TESTS)
         markdown_requirements
         file_loading_encoding
         theme_controller
+        document_text_selection
+        document_navigation
+        workspace_state
         PROPERTIES LABELS "unit"
     )
 endif()

@@ -1,5 +1,7 @@
 #include "ui/DocumentView.h"
 
+#include "core/document/DocumentNavigation.h"
+#include "core/document/DocumentText.h"
 #include "core/flow/Flowchart.h"
 #include "core/policy/ResourcePolicy.h"
 #include "platform/windows/ImageDownloader.h"
@@ -8,7 +10,9 @@
 
 #include <wx/app.h>
 #include <wx/bitmap.h>
+#include <wx/clipbrd.h>
 #include <wx/cursor.h>
+#include <wx/dataobj.h>
 #include <wx/dc.h>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
@@ -19,6 +23,7 @@
 #include <wx/image.h>
 #include <wx/msgdlg.h>
 #include <wx/mstream.h>
+#include <wx/msw/wrapwin.h>
 #include <wx/utils.h>
 
 #include <algorithm>
@@ -85,6 +90,8 @@ struct Segment {
     wxString href;
     int x = 0;
     int width = 0;
+    std::size_t sourceStart = 0;
+    std::size_t sourceEnd = 0;
 };
 
 struct Line {
@@ -113,6 +120,7 @@ struct RowLayout {
 
 struct BlockLayout {
     const litemark::Block* block = nullptr;
+    std::size_t blockIndex = 0;
     int x = 0;
     int y = 0;
     int width = 0;
@@ -264,6 +272,31 @@ int BreakPosition(const wxString& text, int fit) {
 using FontMap =
     std::map<std::tuple<int, bool, bool, bool, bool>, wxFont>;
 
+std::size_t Utf8CodeUnitAdvance(const wxString& text, int index) {
+    const unsigned long value = text[index].GetValue();
+    if (value <= 0x7FUL) {
+        return 1;
+    }
+    if (value <= 0x7FFUL) {
+        return 2;
+    }
+    if (value >= 0xD800UL && value <= 0xDBFFUL) {
+        return 4;
+    }
+    if (value >= 0xDC00UL && value <= 0xDFFFUL) {
+        return 0;
+    }
+    return 3;
+}
+
+std::size_t Utf8ByteLength(const wxString& text) {
+    std::size_t length = 0;
+    for (int index = 0; index < static_cast<int>(text.length()); ++index) {
+        length += Utf8CodeUnitAdvance(text, index);
+    }
+    return length;
+}
+
 void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                      const std::vector<litemark::InlineSpan>& spans,
                      const TextStyle& baseStyle, double fontScale,
@@ -308,7 +341,9 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
     };
 
     auto appendSegment = [&](const wxString& text, const TextStyle& style,
-                             const wxString& href, int width) {
+                             const wxString& href, int width,
+                             std::size_t sourceStart,
+                             std::size_t sourceBytes) {
         Line& line = ensureLine();
         dc.SetFont(fontFor(style));
         const int oldHeight = line.height;
@@ -324,15 +359,31 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                 last.href == href;
             if (sameStyle) {
                 last.text += text;
+                last.sourceEnd = sourceStart + sourceBytes;
                 last.width += width;
                 line.width += width;
             } else {
-                line.segments.push_back(
-                    {text, style, href, line.width, width});
+                Segment segment;
+                segment.text = text;
+                segment.style = style;
+                segment.href = href;
+                segment.x = line.width;
+                segment.width = width;
+                segment.sourceStart = sourceStart;
+                segment.sourceEnd = sourceStart + sourceBytes;
+                line.segments.push_back(std::move(segment));
                 line.width += width;
             }
         } else {
-            line.segments.push_back({text, style, href, 0, width});
+            Segment segment;
+            segment.text = text;
+            segment.style = style;
+            segment.href = href;
+            segment.x = 0;
+            segment.width = width;
+            segment.sourceStart = sourceStart;
+            segment.sourceEnd = sourceStart + sourceBytes;
+            line.segments.push_back(std::move(segment));
             line.width = width;
         }
         if (line.height < oldHeight) {
@@ -341,7 +392,10 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
         refreshHeight();
     };
 
+    std::size_t sourceCursor = 0;
     for (const auto& sourceSpan : spans) {
+        std::size_t spanCursor = sourceCursor;
+        sourceCursor += sourceSpan.text.size();
         wxString text = wxString::FromUTF8(sourceSpan.text);
         if (sourceSpan.image) {
             text = text.empty() ? U8("[图片]")
@@ -373,6 +427,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                 if (ensureLine().segments.empty() &&
                     (part.StartsWith(" ") || part.StartsWith("\t"))) {
                     part = part.Mid(1);
+                    ++spanCursor;
                     continue;
                 }
 
@@ -412,7 +467,10 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
 
                 wxString piece = part.Left(fit);
                 const int pieceWidth = dc.GetTextExtent(piece).x;
-                appendSegment(piece, style, href, pieceWidth);
+                const std::size_t pieceBytes = Utf8ByteLength(piece);
+                appendSegment(piece, style, href, pieceWidth, spanCursor,
+                              pieceBytes);
+                spanCursor += pieceBytes;
                 part = part.Mid(fit);
                 if (!part.empty()) {
                     newLine();
@@ -421,6 +479,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
 
             if (hardBreak) {
                 newLine();
+                ++spanCursor;
             }
         }
     }
@@ -530,6 +589,13 @@ struct DocumentView::Impl {
     BlockLayout* tableDrag = nullptr;
     std::optional<std::chrono::steady_clock::time_point> scrollRequestedAt;
     std::vector<PendingPaintTrace> pendingPaintTraces;
+    std::vector<litemark::HeadingAnchor> headingAnchors;
+    bool headingAnchorsBuilt = false;
+    std::optional<litemark::TextSelectionPoint> selectionAnchor;
+    std::optional<litemark::TextSelectionPoint> selectionFocus;
+    bool selecting = false;
+    bool selectionMoved = false;
+    wxString pressedLink;
 
     ~Impl() {
         for (auto& task : imageTasks) {
@@ -1358,6 +1424,7 @@ struct DocumentView::Impl {
 
         BlockLayout item;
         item.block = &block;
+        item.blockIndex = index;
         item.x = x;
         item.y = y + before;
         item.width = width;
@@ -1418,6 +1485,164 @@ struct DocumentView::Impl {
             found->second.markerY = found->second.y;
         }
         return found->second;
+    }
+
+    std::size_t SourceOffsetAtX(wxDC& dc, const Segment& segment,
+                                int localX) {
+        dc.SetFont(FontFor(segment.style));
+        wxArrayInt partial;
+        dc.GetPartialTextExtents(segment.text, partial);
+        const int clamped =
+            std::clamp(localX, 0, std::max(0, segment.width));
+        std::size_t best = 0;
+        int bestDistance = std::abs(clamped);
+        for (std::size_t index = 0; index < partial.size(); ++index) {
+            const int distance = std::abs(clamped - partial[index]);
+            if (distance < bestDistance) {
+                best = index + 1;
+                bestDistance = distance;
+            }
+        }
+        std::size_t sourceOffset = segment.sourceStart;
+        for (std::size_t index = 0; index < best; ++index) {
+            sourceOffset += Utf8CodeUnitAdvance(
+                segment.text, static_cast<int>(index));
+        }
+        return std::min(sourceOffset, segment.sourceEnd);
+    }
+
+    int XAtSourceOffset(wxDC& dc, const Segment& segment,
+                        std::size_t sourceOffset) {
+        const std::size_t target = std::max(
+            segment.sourceStart,
+            std::min(sourceOffset, segment.sourceEnd));
+        std::size_t sourceOffsetCursor = segment.sourceStart;
+        std::size_t visibleLength = 0;
+        while (visibleLength < segment.text.length() &&
+               sourceOffsetCursor < target) {
+            sourceOffsetCursor += Utf8CodeUnitAdvance(
+                segment.text, static_cast<int>(visibleLength));
+            ++visibleLength;
+        }
+        if (visibleLength == 0) {
+            return 0;
+        }
+        dc.SetFont(FontFor(segment.style));
+        return dc.GetTextExtent(
+                     segment.text.Left(static_cast<int>(visibleLength)))
+            .x;
+    }
+
+    std::optional<std::pair<std::size_t, std::size_t>> SelectionForBlock(
+        std::size_t blockIndex) const {
+        if (!document || !selectionAnchor || !selectionFocus) {
+            return std::nullopt;
+        }
+        const TextSelectionRange normalized = NormalizeSelection(
+            *document, TextSelectionRange{*selectionAnchor, *selectionFocus});
+        if (IsEmptySelection(*document, normalized) ||
+            blockIndex < normalized.start.blockIndex ||
+            blockIndex > normalized.end.blockIndex) {
+            return std::nullopt;
+        }
+        const std::size_t fullSize =
+            BlockPlainText(document->blocks[blockIndex]).size();
+        const std::size_t begin =
+            blockIndex == normalized.start.blockIndex
+                ? normalized.start.utf8Offset
+                : 0;
+        const std::size_t end =
+            blockIndex == normalized.end.blockIndex
+                ? normalized.end.utf8Offset
+                : fullSize;
+        if (begin >= end) {
+            return std::nullopt;
+        }
+        return std::make_pair(begin, end);
+    }
+
+    std::optional<TextSelectionPoint> HitTestPosition(
+        wxDC& dc, const wxPoint& point) {
+        if (!document || document->blocks.empty()) {
+            return std::nullopt;
+        }
+        if (!layout) {
+            return TextSelectionPoint{0, 0};
+        }
+
+        std::size_t blockIndex = document->blocks.size() - 1;
+        int blockY = PageMargin(dc);
+        for (std::size_t index = 0; index < layout->slots.size(); ++index) {
+            const int height = SlotHeight(layout->slots[index]);
+            if (point.y < blockY + height) {
+                blockIndex = index;
+                break;
+            }
+            blockY += height;
+        }
+
+        BlockLayout& item = LayoutFor(
+            dc, blockIndex, blockY, owner->GetClientSize().x);
+        const Block& block = *item.block;
+        const std::string fullText = BlockPlainText(block);
+        const bool textBlock =
+            block.kind == BlockKind::Text ||
+            block.kind == BlockKind::Heading ||
+            block.kind == BlockKind::Code ||
+            block.kind == BlockKind::Html;
+        if (!textBlock || item.text.lines.empty()) {
+            const std::size_t offset =
+                point.y > item.y + item.height / 2 ? fullText.size() : 0;
+            return TextSelectionPoint{blockIndex, offset};
+        }
+
+        const bool code =
+            block.kind == BlockKind::Code || block.kind == BlockKind::Html;
+        const int padding =
+            code ? std::max(6, item.height > 24 ? 10 : 6) : 0;
+        const int baseX = item.x + padding;
+        const int baseY = item.y + padding;
+        const int relativeY = point.y - baseY;
+        const Line* selectedLine = &item.text.lines.front();
+        int closestDistance = std::abs(relativeY - selectedLine->y);
+        for (const auto& line : item.text.lines) {
+            if (relativeY >= line.y && relativeY < line.y + line.height) {
+                selectedLine = &line;
+                break;
+            }
+            const int distance =
+                std::abs(relativeY - (line.y + line.height / 2));
+            if (distance < closestDistance) {
+                selectedLine = &line;
+                closestDistance = distance;
+            }
+        }
+        if (selectedLine->segments.empty()) {
+            return TextSelectionPoint{blockIndex, 0};
+        }
+
+        const int localX = point.x - baseX;
+        for (const auto& segment : selectedLine->segments) {
+            if (localX <= segment.x + segment.width) {
+                return TextSelectionPoint{
+                    blockIndex,
+                    std::min(fullText.size(),
+                             SourceOffsetAtX(
+                                 dc, segment, localX - segment.x))};
+            }
+        }
+        return TextSelectionPoint{
+            blockIndex,
+            std::min(fullText.size(),
+                     selectedLine->segments.back().sourceEnd)};
+    }
+
+    void ClearSelection() {
+        selectionAnchor.reset();
+        selectionFocus.reset();
+        selecting = false;
+        selectionMoved = false;
+        pressedLink.clear();
     }
 
     static wxString BlockMarker(const Block& block) {
@@ -1600,7 +1825,10 @@ struct DocumentView::Impl {
     }
 
     void DrawTextLayout(wxDC& dc, const TextLayout& text, int baseX,
-                        int baseY, bool blockCode) {
+                        int baseY, bool blockCode,
+                        const std::optional<std::pair<std::size_t,
+                                                      std::size_t>>&
+                            selection = std::nullopt) {
         for (const Line& line : text.lines) {
             const int lineY = baseY + line.y;
             for (const Segment& segment : line.segments) {
@@ -1611,6 +1839,24 @@ struct DocumentView::Impl {
                     dc.SetBrush(wxBrush(palette.codeBackground));
                     dc.DrawRectangle(segmentX - 2, lineY - 1,
                                      segment.width + 4, line.height + 2);
+                }
+                if (selection &&
+                    segment.sourceEnd > segment.sourceStart) {
+                    const std::size_t begin =
+                        std::max(selection->first, segment.sourceStart);
+                    const std::size_t end =
+                        std::min(selection->second, segment.sourceEnd);
+                    if (begin < end) {
+                        const int x0 =
+                            XAtSourceOffset(dc, segment, begin);
+                        const int x1 =
+                            XAtSourceOffset(dc, segment, end);
+                        dc.SetPen(*wxTRANSPARENT_PEN);
+                        dc.SetBrush(wxBrush(palette.selection));
+                        dc.DrawRectangle(segmentX + x0, lineY - 1,
+                                         std::max(1, x1 - x0),
+                                         line.height + 2);
+                    }
                 }
                 if (segment.style.link) {
                     dc.SetTextForeground(palette.link);
@@ -1632,6 +1878,7 @@ struct DocumentView::Impl {
 
     void DrawBlock(wxDC& dc, const BlockLayout& item) {
         const Block& block = *item.block;
+        const auto selection = SelectionForBlock(item.blockIndex);
 
         if (block.quoteDepth > 0) {
             dc.SetPen(wxPen(palette.quoteBorder, 3));
@@ -1652,7 +1899,8 @@ struct DocumentView::Impl {
                 dc.DrawRectangle(item.x, item.y, item.width, item.height);
                 const int padding = std::max(6, item.height > 24 ? 10 : 6);
                 DrawTextLayout(dc, item.text, item.x + padding,
-                               item.y + padding, true);
+                               item.y + padding, true,
+                               selection);
                 break;
             }
             case BlockKind::Table:
@@ -1673,7 +1921,8 @@ struct DocumentView::Impl {
                     dc.SetTextForeground(palette.mutedText);
                     dc.DrawText(item.marker, item.markerX, item.markerY);
                 }
-                DrawTextLayout(dc, item.text, item.x, item.y, false);
+                DrawTextLayout(dc, item.text, item.x, item.y, false,
+                               selection);
                 if (block.kind == BlockKind::Heading &&
                     block.headingLevel <= 2) {
                     dc.SetPen(wxPen(palette.border, 1));
@@ -1682,6 +1931,16 @@ struct DocumentView::Impl {
                                 item.y + item.height + 3);
                 }
                 break;
+        }
+        if (selection &&
+            block.kind != BlockKind::Text &&
+            block.kind != BlockKind::Heading &&
+            block.kind != BlockKind::Code &&
+            block.kind != BlockKind::Html) {
+            dc.SetPen(wxPen(palette.accent, 2));
+            dc.SetBrush(*wxTRANSPARENT_BRUSH);
+            dc.DrawRectangle(item.x - 2, item.y - 2,
+                             item.width + 4, item.height + 4);
         }
     }
 
@@ -1969,6 +2228,7 @@ DocumentView::DocumentView(wxWindow* parent)
     Bind(wxEVT_LEFT_DOWN, &DocumentView::OnLeftDown, this);
     Bind(wxEVT_LEFT_UP, &DocumentView::OnLeftUp, this);
     Bind(wxEVT_MOTION, &DocumentView::OnMouseMove, this);
+    Bind(wxEVT_CHAR_HOOK, &DocumentView::OnCharHook, this);
     Bind(wxEVT_THREAD, &DocumentView::OnImageLoaded, this,
          kImageLoadedEventId);
     Bind(wxEVT_THREAD, &DocumentView::OnFlowchartLoaded, this,
@@ -1978,9 +2238,23 @@ DocumentView::DocumentView(wxWindow* parent)
 
 DocumentView::~DocumentView() = default;
 
+#ifdef __WXMSW__
+WXLRESULT DocumentView::MSWWindowProc(WXUINT message, WXWPARAM wParam,
+                                      WXLPARAM lParam) {
+    if (message == WM_COPY) {
+        CopySelectionToClipboard();
+        return 0;
+    }
+    return wxScrolledWindow::MSWWindowProc(message, wParam, lParam);
+}
+#endif
+
 void DocumentView::ShowPlaceholder() {
     impl_->tableDrag = nullptr;
+    impl_->ClearSelection();
     impl_->document.reset();
+    impl_->headingAnchors.clear();
+    impl_->headingAnchorsBuilt = false;
     impl_->basePath.clear();
     impl_->messageTitle = U8("liteMark");
     impl_->messageBody = U8(
@@ -1993,7 +2267,10 @@ void DocumentView::ShowPlaceholder() {
 
 void DocumentView::ShowMessage(const wxString& title, const wxString& body) {
     impl_->tableDrag = nullptr;
+    impl_->ClearSelection();
     impl_->document.reset();
+    impl_->headingAnchors.clear();
+    impl_->headingAnchorsBuilt = false;
     impl_->basePath.clear();
     impl_->messageTitle = title;
     impl_->messageBody = body;
@@ -2006,7 +2283,10 @@ void DocumentView::SetDocument(
     std::shared_ptr<const MarkdownDocument> document,
     const wxString& basePath, int scrollY) {
     impl_->tableDrag = nullptr;
+    impl_->ClearSelection();
     impl_->document = std::move(document);
+    impl_->headingAnchors.clear();
+    impl_->headingAnchorsBuilt = false;
     impl_->basePath = basePath;
     impl_->messageTitle.clear();
     impl_->messageBody.clear();
@@ -2098,6 +2378,70 @@ int DocumentView::ScrollY() const {
     return y;
 }
 
+void DocumentView::SelectAll() {
+    if (!impl_->document || impl_->document->blocks.empty()) {
+        return;
+    }
+    const std::size_t last = impl_->document->blocks.size() - 1;
+    impl_->selectionAnchor = TextSelectionPoint{0, 0};
+    impl_->selectionFocus =
+        TextSelectionPoint{
+            last, BlockPlainText(impl_->document->blocks[last]).size()};
+    impl_->selecting = false;
+    impl_->selectionMoved = true;
+    impl_->pressedLink.clear();
+    Refresh(false);
+}
+
+bool DocumentView::CopySelectionToClipboard() {
+    if (!impl_->document || !impl_->selectionAnchor ||
+        !impl_->selectionFocus) {
+        return false;
+    }
+    const std::string text = PlainTextForSelection(
+        *impl_->document,
+        TextSelectionRange{*impl_->selectionAnchor, *impl_->selectionFocus});
+    if (text.empty() || !wxTheClipboard->Open()) {
+        return false;
+    }
+    const wxString wxText = wxString::FromUTF8(text.data(), text.size());
+    const bool copied =
+        wxTheClipboard->SetData(new wxTextDataObject(wxText));
+    wxTheClipboard->Close();
+    if (copied) {
+        wxTheClipboard->Flush();
+    }
+    return copied;
+}
+
+bool DocumentView::ScrollToAnchor(const wxString& reference) {
+    if (!impl_->document || impl_->document->blocks.empty() ||
+        !impl_->layout) {
+        return false;
+    }
+    const wxScopedCharBuffer utf8 = reference.ToUTF8();
+    if (!impl_->headingAnchorsBuilt) {
+        impl_->headingAnchors = BuildHeadingAnchors(*impl_->document);
+        impl_->headingAnchorsBuilt = true;
+    }
+    const auto block = FindHeadingBlock(
+        impl_->headingAnchors,
+        std::string_view(utf8.data(), utf8.length()));
+    if (!block) {
+        return false;
+    }
+
+    wxClientDC dc(this);
+    DoPrepareDC(dc);
+    int y = impl_->PageMargin(dc);
+    for (std::size_t index = 0; index < *block; ++index) {
+        y += impl_->SlotHeight(impl_->layout->slots[index]);
+    }
+    Scroll(0, std::max(0, y - FromDIP(10)));
+    Refresh(false);
+    return true;
+}
+
 void DocumentView::ApplyTheme(const ThemePalette& palette) {
     impl_->palette = palette;
     SetBackgroundColour(palette.documentBackground);
@@ -2110,6 +2454,24 @@ void DocumentView::OnSize(wxSizeEvent& event) {
         impl_->layoutDirty = true;
     }
     Refresh();
+    event.Skip();
+}
+
+void DocumentView::OnCharHook(wxKeyEvent& event) {
+    if (event.ControlDown()) {
+        switch (std::toupper(event.GetKeyCode())) {
+            case 'A':
+                SelectAll();
+                return;
+            case 'C':
+                if (CopySelectionToClipboard()) {
+                    return;
+                }
+                break;
+            default:
+                break;
+        }
+    }
     event.Skip();
 }
 
@@ -2209,16 +2571,29 @@ void DocumentView::OnLeftDown(wxMouseEvent& event) {
         return;
     }
 
-    const wxString href = impl_->LinkAt(wxPoint(contentX, contentY));
-    if (!href.empty()) {
-        const ExternalLinkResult result = OpenExternalLink(href);
-        if (result == ExternalLinkResult::Failed) {
-            wxMessageBox(U8("无法调用系统默认应用打开该链接。"),
-                         U8("打开链接失败"), wxOK | wxICON_WARNING, this);
-        }
+    if (!impl_->document || impl_->document->blocks.empty()) {
+        event.Skip();
         return;
     }
-    event.Skip();
+    SetFocus();
+    wxClientDC dc(this);
+    DoPrepareDC(dc);
+    const auto hit = impl_->HitTestPosition(
+        dc, wxPoint(contentX, contentY));
+    if (!hit) {
+        event.Skip();
+        return;
+    }
+
+    impl_->selectionAnchor = *hit;
+    impl_->selectionFocus = *hit;
+    impl_->selecting = true;
+    impl_->selectionMoved = false;
+    impl_->pressedLink = impl_->LinkAt(wxPoint(contentX, contentY));
+    if (!HasCapture()) {
+        CaptureMouse();
+    }
+    Refresh(false);
 }
 
 void DocumentView::OnMouseMove(wxMouseEvent& event) {
@@ -2237,9 +2612,39 @@ void DocumentView::OnMouseMove(wxMouseEvent& event) {
     int contentY = 0;
     CalcUnscrolledPosition(event.GetPosition().x, event.GetPosition().y,
                            &contentX, &contentY);
+    if (impl_->selecting && event.LeftIsDown()) {
+        const int clientHeight = GetClientSize().y;
+        int scrollStep = 0;
+        if (event.GetPosition().y < 0) {
+            scrollStep = -FromDIP(24);
+        } else if (event.GetPosition().y >= clientHeight) {
+            scrollStep = FromDIP(24);
+        }
+        if (scrollStep != 0) {
+            Scroll(0, std::max(0, ScrollY() + scrollStep));
+            CalcUnscrolledPosition(
+                event.GetPosition().x, event.GetPosition().y,
+                &contentX, &contentY);
+        }
+        wxClientDC dc(this);
+        DoPrepareDC(dc);
+        const auto hit = impl_->HitTestPosition(
+            dc, wxPoint(contentX, contentY));
+        if (hit &&
+            (!impl_->selectionFocus ||
+             hit->blockIndex != impl_->selectionFocus->blockIndex ||
+             hit->utf8Offset != impl_->selectionFocus->utf8Offset)) {
+            impl_->selectionFocus = *hit;
+            impl_->selectionMoved = true;
+            SetCursor(wxCursor(wxCURSOR_IBEAM));
+            Refresh(false);
+        }
+        return;
+    }
+
     const wxString href = impl_->LinkAt(wxPoint(contentX, contentY));
     if (href.empty()) {
-        SetCursor(wxCursor(wxCURSOR_ARROW));
+        SetCursor(wxCursor(impl_->document ? wxCURSOR_IBEAM : wxCURSOR_ARROW));
     } else {
         SetCursor(wxCursor(wxCURSOR_HAND));
     }
@@ -2255,7 +2660,35 @@ void DocumentView::OnLeftUp(wxMouseEvent& event) {
         Refresh(false);
         return;
     }
-    event.Skip();
+    if (!impl_->selecting) {
+        event.Skip();
+        return;
+    }
+
+    impl_->selecting = false;
+    if (HasCapture()) {
+        ReleaseMouse();
+    }
+    const bool activateLink =
+        !impl_->selectionMoved && !impl_->pressedLink.empty();
+    const wxString href = impl_->pressedLink;
+    impl_->pressedLink.clear();
+    if (activateLink) {
+        impl_->ClearSelection();
+        if (href.StartsWith("#")) {
+            ScrollToAnchor(href);
+        } else {
+            const ExternalLinkResult result = OpenExternalLink(href);
+            if (result == ExternalLinkResult::Failed) {
+                wxMessageBox(U8("无法调用系统默认应用打开该链接。"),
+                             U8("打开链接失败"), wxOK | wxICON_WARNING, this);
+            }
+        }
+        Refresh(false);
+    } else if (!impl_->selectionMoved) {
+        impl_->ClearSelection();
+        Refresh(false);
+    }
 }
 
 void DocumentView::OnPaint(wxPaintEvent&) {

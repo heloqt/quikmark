@@ -1,6 +1,7 @@
 #pragma once
 
 #include "session/TabManager.h"
+#include "session/WorkspaceState.h"
 #include "ui/ThemeController.h"
 
 #include <wx/frame.h>
@@ -17,7 +18,10 @@
 #include <vector>
 
 class wxCommandEvent;
+class wxCloseEvent;
+class wxKeyEvent;
 class wxFileSystemWatcherEvent;
+class wxMenu;
 class wxPanel;
 class wxStaticText;
 class wxSysColourChangedEvent;
@@ -31,7 +35,7 @@ class TabStrip;
 
 class MainFrame : public wxFrame {
 public:
-    explicit MainFrame(ThemeController& theme);
+    explicit MainFrame(ThemeController& theme, const wxString& workspacePath);
     ~MainFrame() override;
 
     void OpenPath(const wxString& path);
@@ -48,6 +52,8 @@ private:
         ID_OUTLINE,
         ID_NEXT_TAB,
         ID_PREVIOUS_TAB,
+        ID_RECENT_FIRST,
+        ID_RECENT_LAST = ID_RECENT_FIRST + 4,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -74,6 +80,11 @@ private:
     void OnFileChanged(wxFileSystemWatcherEvent& event);
     void OnChangeTimer(wxTimerEvent& event);
     void SaveCurrentScroll();
+    void RestoreWorkspace();
+    void SaveWorkspace();
+    void RestoreWindowPlacement();
+    void UpdateRecentMenu();
+    void RememberRecentFile(const wxString& path);
     void ActivateTab(int index);
     void ActivateNextTab();
     void ActivatePreviousTab();
@@ -87,9 +98,16 @@ private:
     void OnRegisterFileAssociation(wxCommandEvent& event);
     void OnExit(wxCommandEvent& event);
     void OnAppearance(wxCommandEvent& event);
+    void OnRecentFile(wxCommandEvent& event);
+    void OnCloseWindow(wxCloseEvent& event);
+    void OnCharHook(wxKeyEvent& event);
+    void OnCopy(wxCommandEvent& event);
+    void OnSelectAll(wxCommandEvent& event);
     void OnSystemColourChanged(wxSysColourChangedEvent& event);
 
     ThemeController& theme_;
+    std::unique_ptr<WorkspaceStore> workspaceStore_;
+    WorkspaceState workspace_;
     TabManager tabs_;
     wxFileSystemWatcher fileWatcher_;
     wxTimer changeTimer_;
@@ -98,6 +116,7 @@ private:
     DocumentView* documentView_ = nullptr;
     wxPanel* changeBanner_ = nullptr;
     wxStaticText* changeText_ = nullptr;
+    wxMenu* recentMenu_ = nullptr;
     std::vector<std::unique_ptr<ParseTask>> parseTasks_;
     std::map<std::uint64_t, std::chrono::steady_clock::time_point>
         parseStartTimes_;

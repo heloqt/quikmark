@@ -12,6 +12,7 @@
 class wxPaintEvent;
 class wxSizeEvent;
 class wxMouseEvent;
+class wxKeyEvent;
 class wxThreadEvent;
 
 namespace litemark {
@@ -33,14 +34,22 @@ public:
     void ForgetDocument(
         const std::shared_ptr<const MarkdownDocument>& document);
     int ScrollY() const;
+    void SelectAll();
+    bool CopySelectionToClipboard();
+    bool ScrollToAnchor(const wxString& reference);
     void ApplyTheme(const ThemePalette& palette);
 
 private:
     struct Impl;
 
+#ifdef __WXMSW__
+    WXLRESULT MSWWindowProc(WXUINT message, WXWPARAM wParam,
+                            WXLPARAM lParam) override;
+#endif
     void OnPaint(wxPaintEvent& event);
     void OnSize(wxSizeEvent& event);
     void OnMouseWheel(wxMouseEvent& event);
+    void OnCharHook(wxKeyEvent& event);
     void OnLeftDown(wxMouseEvent& event);
     void OnLeftUp(wxMouseEvent& event);
     void OnMouseMove(wxMouseEvent& event);

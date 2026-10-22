@@ -8,6 +8,7 @@
 
 #include <wx/dnd.h>
 #include <wx/button.h>
+#include <wx/display.h>
 #include <wx/event.h>
 #include <wx/filedlg.h>
 #include <wx/filename.h>
@@ -22,6 +23,7 @@
 #include <atomic>
 #include <chrono>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -59,10 +61,17 @@ private:
 
 namespace litemark {
 
-MainFrame::MainFrame(ThemeController& theme)
+MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     : wxFrame(nullptr, wxID_ANY, U8("liteMark"), wxDefaultPosition, wxDefaultSize),
-      theme_(theme) {
+      theme_(theme),
+      workspaceStore_(std::make_unique<WorkspaceStore>(
+          std::filesystem::path(workspacePath.ToStdWstring()))) {
+    workspace_ = workspaceStore_->Load();
+    TraceEvent("startup_workspace",
+               static_cast<double>(ProcessAgeMicroseconds()));
     CreateMenuBar();
+    TraceEvent("startup_menu",
+               static_cast<double>(ProcessAgeMicroseconds()));
 
     tabStrip_ = new TabStrip(this);
     changeBanner_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
@@ -105,8 +114,13 @@ MainFrame::MainFrame(ThemeController& theme)
 
     BindEvents();
     ApplyTheme();
-    UpdateFromTabs();
-    Centre();
+    TraceEvent("startup_controls",
+               static_cast<double>(ProcessAgeMicroseconds()));
+    RestoreWindowPlacement();
+    RestoreWorkspace();
+    UpdateRecentMenu();
+    TraceEvent("startup_restored",
+               static_cast<double>(ProcessAgeMicroseconds()));
 }
 
 MainFrame::~MainFrame() {
@@ -132,6 +146,9 @@ void MainFrame::OpenPath(const wxString& path) {
             StartParse(*current);
         }
     }
+    if (const TabSession* current = tabs_.selected()) {
+        RememberRecentFile(current->path);
+    }
 }
 
 void MainFrame::OpenPaths(const wxArrayString& paths) {
@@ -140,15 +157,136 @@ void MainFrame::OpenPaths(const wxArrayString& paths) {
     }
 }
 
+void MainFrame::RestoreWorkspace() {
+    std::size_t selected = 0;
+    for (std::size_t index = 0; index < workspace_.tabs.size(); ++index) {
+        const auto& saved = workspace_.tabs[index];
+        const wxString path =
+            wxString::FromUTF8(saved.path.data(), saved.path.size());
+        if (!wxFileExists(path)) {
+            continue;
+        }
+        if (tabs_.OpenFile(path) != TabOpenResult::Opened) {
+            continue;
+        }
+        if (TabSession* current = tabs_.selectedMutable()) {
+            current->scrollY = std::max(0, saved.scrollY);
+            WatchFile(current->path);
+            StartParse(*current);
+        }
+        if (index <= workspace_.selectedTab) {
+            selected = tabs_.tabs().size() - 1;
+        }
+    }
+
+    if (!tabs_.tabs().empty()) {
+        tabs_.Activate(selected);
+        UpdateFromTabs();
+        documentView_->SetFocus();
+    } else {
+        UpdateFromTabs();
+    }
+}
+
+void MainFrame::SaveWorkspace() {
+    SaveCurrentScroll();
+    WorkspaceState state = workspace_;
+    state.hasWindowPlacement = true;
+    const wxRect bounds = GetScreenRect();
+    state.windowX = bounds.x;
+    state.windowY = bounds.y;
+    state.windowWidth = bounds.width;
+    state.windowHeight = bounds.height;
+    state.maximized = IsMaximized();
+    state.selectedTab = static_cast<std::size_t>(
+        std::max(0, tabs_.selectedIndex()));
+    state.tabs.clear();
+    for (const auto& tab : tabs_.tabs()) {
+        if (!wxFileExists(tab.path)) {
+            continue;
+        }
+        const wxScopedCharBuffer path = tab.path.ToUTF8();
+        state.tabs.push_back(SavedTabState{
+            std::string(path.data(), path.length()),
+            std::max(0, tab.scrollY),
+        });
+    }
+    workspace_ = std::move(state);
+    workspaceStore_->Save(workspace_);
+}
+
+void MainFrame::RestoreWindowPlacement() {
+    if (!workspace_.hasWindowPlacement || workspace_.windowWidth <= 0 ||
+        workspace_.windowHeight <= 0) {
+        Centre();
+        return;
+    }
+
+    const wxRect restored(workspace_.windowX, workspace_.windowY,
+                          workspace_.windowWidth, workspace_.windowHeight);
+    bool visible = false;
+    for (unsigned int index = 0; index < wxDisplay::GetCount(); ++index) {
+        if (wxDisplay(index).GetClientArea().Intersects(restored)) {
+            visible = true;
+            break;
+        }
+    }
+    if (visible) {
+        SetSize(restored);
+    } else {
+        Centre();
+    }
+    if (workspace_.maximized) {
+        Maximize(true);
+    }
+}
+
+void MainFrame::UpdateRecentMenu() {
+    if (recentMenu_ == nullptr) {
+        return;
+    }
+    while (recentMenu_->GetMenuItemCount() > 0) {
+        recentMenu_->Destroy(
+            recentMenu_->FindItemByPosition(recentMenu_->GetMenuItemCount() - 1));
+    }
+    if (workspace_.recentFiles.empty()) {
+        wxMenuItem* empty =
+            recentMenu_->Append(wxID_NONE, U8("暂无最近文档"));
+        empty->Enable(false);
+        return;
+    }
+    const std::size_t count = std::min<std::size_t>(
+        workspace_.recentFiles.size(), 5);
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::string& path = workspace_.recentFiles[index];
+        recentMenu_->Append(
+            ID_RECENT_FIRST + static_cast<int>(index),
+            wxString::FromUTF8(path.data(), path.size()));
+    }
+}
+
+void MainFrame::RememberRecentFile(const wxString& path) {
+    const wxScopedCharBuffer utf8 = path.ToUTF8();
+    WorkspaceStore::AddRecent(
+        &workspace_, std::string(utf8.data(), utf8.length()), 5);
+    UpdateRecentMenu();
+}
+
 void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
     fileMenu->Append(wxID_OPEN, U8("打开...\tCtrl+O"));
+    recentMenu_ = new wxMenu();
+    fileMenu->AppendSubMenu(recentMenu_, U8("最近打开"));
     fileMenu->Append(ID_RELOAD, U8("重新加载\tCtrl+R"));
     fileMenu->Append(ID_CLOSE_TAB, U8("关闭当前 Tab\tCtrl+W"));
     fileMenu->AppendSeparator();
     fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION, U8("注册文件关联..."));
     fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, U8("退出"));
+
+    auto* editMenu = new wxMenu();
+    editMenu->Append(wxID_COPY, U8("复制\tCtrl+C"));
+    editMenu->Append(wxID_SELECTALL, U8("全选\tCtrl+A"));
 
     auto* appearanceMenu = new wxMenu();
     appearanceMenu->AppendRadioItem(ID_APPEARANCE_SYSTEM,
@@ -168,6 +306,7 @@ void MainFrame::CreateMenuBar() {
 
     auto* menuBar = new wxMenuBar();
     menuBar->Append(fileMenu, U8("文件"));
+    menuBar->Append(editMenu, U8("编辑"));
     menuBar->Append(viewMenu, U8("查看"));
     SetMenuBar(menuBar);
 }
@@ -184,6 +323,10 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnExit, this, wxID_EXIT);
     Bind(wxEVT_MENU, &MainFrame::OnAppearance, this, ID_APPEARANCE_SYSTEM,
          ID_APPEARANCE_DARK);
+    Bind(wxEVT_MENU, &MainFrame::OnRecentFile, this, ID_RECENT_FIRST,
+         ID_RECENT_LAST);
+    Bind(wxEVT_MENU, &MainFrame::OnCopy, this, wxID_COPY);
+    Bind(wxEVT_MENU, &MainFrame::OnSelectAll, this, wxID_SELECTALL);
     Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);
     Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         tabs_.DismissChangeNotice();
@@ -194,6 +337,8 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_FSWATCHER, &MainFrame::OnFileChanged, this);
     Bind(wxEVT_TIMER, &MainFrame::OnChangeTimer, this, ID_CHANGE_TIMER);
     Bind(wxEVT_THREAD, &MainFrame::OnParseCompleted, this, ID_PARSE_COMPLETED);
+    Bind(wxEVT_CLOSE_WINDOW, &MainFrame::OnCloseWindow, this);
+    Bind(wxEVT_CHAR_HOOK, &MainFrame::OnCharHook, this);
 }
 
 void MainFrame::ApplyTheme() {
@@ -352,7 +497,6 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     if (current != nullptr && current->id == result.tabId) {
         UpdateFromTabs();
         if (result.document) {
-            documentView_->Update();
             const auto start = parseStartTimes_.find(result.tabId);
             if (start != parseStartTimes_.end()) {
                 documentView_->TraceNextPaint("hot_open", start->second);
@@ -360,6 +504,9 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
                     documentView_->TraceNextPaintProcessAge("cold_start");
                     coldStartTraced_ = true;
                 }
+            }
+            documentView_->Update();
+            if (start != parseStartTimes_.end()) {
                 wxString perfLogPath;
                 if (wxGetEnv("LITEMARK_PERF_LOG", &perfLogPath) &&
                     !perfLogPath.empty()) {
@@ -429,7 +576,9 @@ void MainFrame::OnChangeTimer(wxTimerEvent&) {
 
 void MainFrame::SaveCurrentScroll() {
     if (TabSession* current = tabs_.selectedMutable()) {
-        current->scrollY = documentView_->ScrollY();
+        if (current->document) {
+            current->scrollY = documentView_->ScrollY();
+        }
     }
 }
 
@@ -576,6 +725,44 @@ void MainFrame::OnAppearance(wxCommandEvent& event) {
         default:
             break;
     }
+}
+
+void MainFrame::OnRecentFile(wxCommandEvent& event) {
+    const int index = event.GetId() - ID_RECENT_FIRST;
+    if (index < 0 ||
+        static_cast<std::size_t>(index) >= workspace_.recentFiles.size()) {
+        return;
+    }
+    const std::string& path = workspace_.recentFiles[
+        static_cast<std::size_t>(index)];
+    OpenPath(wxString::FromUTF8(path.data(), path.size()));
+}
+
+void MainFrame::OnCloseWindow(wxCloseEvent& event) {
+    SaveWorkspace();
+    event.Skip();
+}
+
+void MainFrame::OnCharHook(wxKeyEvent& event) {
+    if (event.ControlDown()) {
+        if (event.GetKeyCode() == 'A') {
+            documentView_->SelectAll();
+            return;
+        }
+        if (event.GetKeyCode() == 'C' &&
+            documentView_->CopySelectionToClipboard()) {
+            return;
+        }
+    }
+    event.Skip();
+}
+
+void MainFrame::OnCopy(wxCommandEvent&) {
+    documentView_->CopySelectionToClipboard();
+}
+
+void MainFrame::OnSelectAll(wxCommandEvent&) {
+    documentView_->SelectAll();
 }
 
 void MainFrame::OnSystemColourChanged(wxSysColourChangedEvent& event) {

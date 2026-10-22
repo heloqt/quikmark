@@ -1,14 +1,18 @@
 #include "app/Application.h"
 
 #include "platform/windows/IpcServer.h"
+#include "platform/windows/PerformanceTrace.h"
 #include "platform/windows/SingletonGuard.h"
 #include "ui/MainFrame.h"
 #include "ui/ThemeController.h"
 
 #include <wx/event.h>
+#include <wx/filename.h>
 #include <wx/image.h>
 #include <wx/msgdlg.h>
+#include <wx/stdpaths.h>
 #include <wx/timer.h>
+#include <wx/utils.h>
 
 #include <vector>
 
@@ -18,9 +22,13 @@ Application::Application() = default;
 Application::~Application() = default;
 
 bool Application::OnInit() {
+    TraceEvent("startup_begin",
+               static_cast<double>(ProcessAgeMicroseconds()));
     SetAppName("liteMark");
     SetVendorName("liteMark");
     wxInitAllImageHandlers();
+    TraceEvent("startup_images",
+               static_cast<double>(ProcessAgeMicroseconds()));
 
     std::vector<wxString> paths;
     bool smokeTest = false;
@@ -46,9 +54,25 @@ bool Application::OnInit() {
     }
 
     theme_ = std::make_unique<ThemeController>();
-    frame_ = new MainFrame(*theme_);
+    wxString configRoot;
+    if (!wxGetEnv("LITEMARK_CONFIG_DIR", &configRoot) ||
+        configRoot.empty()) {
+        configRoot = wxStandardPaths::Get().GetUserConfigDir();
+    }
+    wxFileName configDirectory(configRoot, wxString());
+    configDirectory.AppendDir("liteMark");
+    configDirectory.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    const wxString workspacePath =
+        wxFileName(configDirectory.GetPath(), "workspace.ini").GetFullPath();
+    TraceEvent("startup_before_frame",
+               static_cast<double>(ProcessAgeMicroseconds()));
+    frame_ = new MainFrame(*theme_, workspacePath);
+    TraceEvent("startup_frame",
+               static_cast<double>(ProcessAgeMicroseconds()));
     SetTopWindow(frame_);
     frame_->Show();
+    TraceEvent("startup_shown",
+               static_cast<double>(ProcessAgeMicroseconds()));
 
     Bind(LITEMARK_EVT_OPEN_PATHS, &Application::OnExternalOpen, this);
     ipcServer_ = std::make_unique<IpcServer>(this);

@@ -14,6 +14,17 @@ if (-not (Test-Path -LiteralPath $Exe)) {
 }
 
 $projectRoot = (Get-Location).Path
+$performanceConfigDir = Join-Path $projectRoot "build\perf-config"
+if (Test-Path -LiteralPath $performanceConfigDir) {
+    $resolvedConfig = (Resolve-Path -LiteralPath $performanceConfigDir).Path
+    if (-not $resolvedConfig.StartsWith(
+            $projectRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected benchmark config path: $resolvedConfig"
+    }
+    Remove-Item -LiteralPath $resolvedConfig -Recurse -Force
+}
+New-Item -ItemType Directory -Path $performanceConfigDir -Force | Out-Null
+$env:LITEMARK_CONFIG_DIR = $performanceConfigDir
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $system = Get-CimInstance Win32_ComputerSystem
 $operatingSystem = Get-CimInstance Win32_OperatingSystem
@@ -367,5 +378,6 @@ $result = [pscustomobject]@{
 
 $result | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath $resultFile -Encoding UTF8
+Remove-Item Env:LITEMARK_CONFIG_DIR -ErrorAction SilentlyContinue
 $result | Format-List
 Write-Host "Results: $resultFile"

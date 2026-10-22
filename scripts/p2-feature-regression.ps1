@@ -1,0 +1,403 @@
+param(
+    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\litemark.exe"
+)
+
+$ErrorActionPreference = "Stop"
+
+if (Get-Process litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running litemark instances before running this test."
+}
+if (-not (Test-Path -LiteralPath $Exe)) {
+    throw "Executable not found: $Exe"
+}
+
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class P2RegressionNative {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SCROLLINFO {
+        public uint cbSize;
+        public uint fMask;
+        public int nMin;
+        public int nMax;
+        public uint nPage;
+        public int nPos;
+        public int nTrackPos;
+    }
+    public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr data);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint attach, uint attachTo, bool value);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] public static extern bool GetScrollInfo(IntPtr hWnd, int bar, ref SCROLLINFO info);
+    [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int position);
+    [DllImport("user32.dll")] public static extern int GetMenuItemID(IntPtr menu, int position);
+}
+'@
+Add-Type -AssemblyName System.Drawing
+
+function Wait-Title(
+    [System.Diagnostics.Process]$Process,
+    [string]$Pattern,
+    [int]$TimeoutSeconds = 15
+) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            throw "Process exited while waiting for title '$Pattern'."
+        }
+        if ($Process.MainWindowTitle -like $Pattern) {
+            return
+        }
+        Start-Sleep -Milliseconds 25
+    }
+    throw "Timed out waiting for title '$Pattern'."
+}
+
+function Get-LargestChild([IntPtr]$Parent) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][P2RegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        $rect = [P2RegressionNative+RECT]::new()
+        [void][P2RegressionNative]::GetWindowRect($handle, [ref]$rect)
+        $area = ($rect.Right - $rect.Left) * ($rect.Bottom - $rect.Top)
+        [void]$items.Add([pscustomobject]@{
+            Handle = $handle
+            Rect = $rect
+            Area = $area
+        })
+        return $true
+    }, [IntPtr]::Zero)
+    return $items | Sort-Object Area -Descending | Select-Object -First 1
+}
+
+function Get-VerticalScroll([IntPtr]$Window) {
+    $info = [P2RegressionNative+SCROLLINFO]::new()
+    $info.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($info)
+    $info.fMask = 0x17
+    if (-not [P2RegressionNative]::GetScrollInfo($Window, 1, [ref]$info)) {
+        throw "GetScrollInfo failed."
+    }
+    return $info.nPos
+}
+
+function Save-WindowScreenshot([IntPtr]$Window, [string]$Path) {
+    $rect = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect($Window, [ref]$rect)
+    $width = $rect.Right - $rect.Left
+    $height = $rect.Bottom - $rect.Top
+    $bitmap = [System.Drawing.Bitmap]::new($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0,
+                                 [System.Drawing.Size]::new($width, $height))
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+function Count-ColorPixels([string]$Path, [System.Drawing.Color]$Color) {
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    $count = 0
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; $y += 2) {
+            for ($x = 0; $x -lt $bitmap.Width; $x += 2) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                if ($pixel.R -eq $Color.R -and $pixel.G -eq $Color.G -and
+                    $pixel.B -eq $Color.B) {
+                    ++$count
+                }
+            }
+        }
+    } finally {
+        $bitmap.Dispose()
+    }
+    return $count
+}
+
+function Send-MenuCommand(
+    [IntPtr]$Window,
+    [int]$SubmenuPosition,
+    [int]$ItemPosition
+) {
+    $menu = [P2RegressionNative]::GetMenu($Window)
+    $submenu = [P2RegressionNative]::GetSubMenu($menu, $SubmenuPosition)
+    $id = [P2RegressionNative]::GetMenuItemID($submenu, $ItemPosition)
+    if ($id -le 0) {
+        throw "Could not resolve menu command $SubmenuPosition/$ItemPosition."
+    }
+    [void][P2RegressionNative]::SendMessage(
+        $Window, 0x0111, [IntPtr]$id, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 150
+}
+
+function Send-CtrlKey([byte]$Key) {
+    [P2RegressionNative]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
+    [P2RegressionNative]::keybd_event($Key, 0, 0, [UIntPtr]::Zero)
+    [P2RegressionNative]::keybd_event($Key, 0, 0x0002, [UIntPtr]::Zero)
+    [P2RegressionNative]::keybd_event(0x11, 0, 0x0002, [UIntPtr]::Zero)
+}
+
+function Focus-Window([IntPtr]$Window, [IntPtr]$FocusTarget = [IntPtr]::Zero) {
+    $foreground = [P2RegressionNative]::GetForegroundWindow()
+    $foregroundProcess = [uint32]0
+    $foregroundThread = [P2RegressionNative]::GetWindowThreadProcessId(
+        $foreground, [ref]$foregroundProcess)
+    $currentThread = [P2RegressionNative]::GetCurrentThreadId()
+    $attached = $false
+    if ($foregroundThread -ne 0 -and $foregroundThread -ne $currentThread) {
+        $attached = [P2RegressionNative]::AttachThreadInput(
+            $currentThread, $foregroundThread, $true)
+    }
+    try {
+        [void][P2RegressionNative]::BringWindowToTop($Window)
+        [void][P2RegressionNative]::SetForegroundWindow($Window)
+        if ($FocusTarget -ne [IntPtr]::Zero) {
+            [void][P2RegressionNative]::SetFocus($FocusTarget)
+        }
+    } finally {
+        if ($attached) {
+            [void][P2RegressionNative]::AttachThreadInput(
+                $currentThread, $foregroundThread, $false)
+        }
+    }
+}
+
+function Send-MouseDrag(
+    [IntPtr]$Window,
+    [int]$StartX,
+    [int]$StartY,
+    [int]$EndX,
+    [int]$EndY
+) {
+    $start = [IntPtr]([int64](($StartY -band 0xffff) -shl 16) -bor
+                      [int64]($StartX -band 0xffff))
+    $end = [IntPtr]([int64](($EndY -band 0xffff) -shl 16) -bor
+                    [int64]($EndX -band 0xffff))
+    [void][P2RegressionNative]::SendMessage($Window, 0x0201, [IntPtr]1, $start)
+    Start-Sleep -Milliseconds 80
+    [void][P2RegressionNative]::SendMessage($Window, 0x0200, [IntPtr]1, $end)
+    Start-Sleep -Milliseconds 80
+    [void][P2RegressionNative]::SendMessage($Window, 0x0202, [IntPtr]0, $end)
+    Start-Sleep -Milliseconds 150
+}
+
+function Send-WheelDown([IntPtr]$Window, [int]$Count) {
+    $rect = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect($Window, [ref]$rect)
+    $x = $rect.Left + [int](($rect.Right - $rect.Left) / 2)
+    $y = $rect.Top + [int](($rect.Bottom - $rect.Top) / 2)
+    $lParam = [IntPtr]([int64](($y -band 0xffff) -shl 16) -bor
+                       [int64]($x -band 0xffff))
+    for ($i = 0; $i -lt $Count; ++$i) {
+        [void][P2RegressionNative]::SendMessage(
+            $Window, 0x020A, [IntPtr](-7864320), $lParam)
+        Start-Sleep -Milliseconds 40
+    }
+    Start-Sleep -Milliseconds 200
+}
+
+function Get-ProjectRoot {
+    return (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+}
+
+$projectRoot = Get-ProjectRoot
+$fixtureDir = Join-Path $projectRoot "build\p2-regression"
+$configRoot = Join-Path $projectRoot "build\p2-regression-config"
+if (Test-Path -LiteralPath $configRoot) {
+    $resolved = (Resolve-Path -LiteralPath $configRoot).Path
+    if (-not $resolved.StartsWith($projectRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected test config path: $resolved"
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+New-Item -ItemType Directory -Path $fixtureDir -Force | Out-Null
+New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
+
+$selectionFile = Join-Path $fixtureDir "selection.md"
+$anchorFile = Join-Path $fixtureDir "anchor.md"
+$selectionLines = @()
+for ($i = 1; $i -le 40; ++$i) {
+    $selectionLines += "Selection filler paragraph $i."
+}
+$selectionText = @'
+# Selection Start
+
+Alpha paragraph line one.
+
+Beta paragraph line two.
+
+Gamma paragraph line three.
+
+## Selection End
+
+Delta paragraph after the target heading.
+
+'@ + ($selectionLines -join "`n`n")
+$anchorLines = @()
+for ($i = 1; $i -le 40; ++$i) {
+    $anchorLines += "Filler paragraph $i."
+}
+$anchorText = @'
+[Jump to target](#target-heading)
+
+'@ + ($anchorLines -join "`n`n") + @'
+
+## Target Heading
+
+Target body.
+'@
+[IO.File]::WriteAllText($selectionFile, $selectionText,
+                        [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($anchorFile, $anchorText,
+                        [Text.UTF8Encoding]::new($false))
+
+$env:LITEMARK_CONFIG_DIR = $configRoot
+$selectionProcess = Start-Process -FilePath $Exe -ArgumentList $selectionFile -PassThru
+try {
+    Wait-Title $selectionProcess "selection.md*"
+    Start-Sleep -Milliseconds 700
+    $document = Get-LargestChild $selectionProcess.MainWindowHandle
+    Send-MouseDrag $document.Handle 35 45 520 250
+    $screenshot = Join-Path $projectRoot "build\p2-selection.png"
+    Save-WindowScreenshot $selectionProcess.MainWindowHandle $screenshot
+    $selectionPixels = Count-ColorPixels $screenshot `
+        ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
+    Send-MenuCommand $selectionProcess.MainWindowHandle 1 0
+    Start-Sleep -Milliseconds 250
+    $copied = Get-Clipboard -Raw
+    if ($copied -notlike "*Selection Start*" -or
+        $copied -notlike "*Selection End*" -or
+        $copied -like "*# Selection Start*") {
+        throw "Cross-block plain-text copy failed. Clipboard: $copied"
+    }
+    Send-MenuCommand $selectionProcess.MainWindowHandle 1 1
+    $selectAllScreenshot = Join-Path $projectRoot "build\p2-selection-all.png"
+    Save-WindowScreenshot $selectionProcess.MainWindowHandle `
+        $selectAllScreenshot
+    $selectAllPixels = Count-ColorPixels $selectAllScreenshot `
+        ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
+    if ($selectAllPixels -lt 100) {
+        throw "Select-all highlight was not visible."
+    }
+    Send-MenuCommand $selectionProcess.MainWindowHandle 1 0
+    $copiedAll = Get-Clipboard -Raw
+    if ($copiedAll -notlike "*Selection Start*" -or
+        $copiedAll -notlike "*Selection filler paragraph 40*") {
+        throw "Select-all copy failed."
+    }
+} finally {
+    if ($selectionProcess -and -not $selectionProcess.HasExited) {
+        Stop-Process -Id $selectionProcess.Id -Force
+    }
+}
+
+$anchorProcess = Start-Process -FilePath $Exe -ArgumentList $anchorFile -PassThru
+try {
+    Wait-Title $anchorProcess "anchor.md*"
+    Start-Sleep -Milliseconds 700
+    $document = Get-LargestChild $anchorProcess.MainWindowHandle
+    Focus-Window $anchorProcess.MainWindowHandle $document.Handle
+    Send-MouseDrag $document.Handle 65 52 65 52
+    Start-Sleep -Milliseconds 300
+    $anchorPosition = Get-VerticalScroll $document.Handle
+    if ($anchorPosition -le 0) {
+        throw "Internal anchor click did not scroll the document."
+    }
+} finally {
+    if ($anchorProcess -and -not $anchorProcess.HasExited) {
+        Stop-Process -Id $anchorProcess.Id -Force
+    }
+}
+
+$workspaceProcess = Start-Process -FilePath $Exe -ArgumentList $selectionFile -PassThru
+try {
+    Wait-Title $workspaceProcess "selection.md*"
+    Start-Sleep -Milliseconds 500
+    $workspaceDocument = Get-LargestChild $workspaceProcess.MainWindowHandle
+    Send-WheelDown $workspaceDocument.Handle 5
+    $savedSelectionScroll = Get-VerticalScroll $workspaceDocument.Handle
+    if ($savedSelectionScroll -le 0) {
+        throw "Workspace fixture did not scroll before saving."
+    }
+    [void][P2RegressionNative]::SetWindowPos(
+        $workspaceProcess.MainWindowHandle, [IntPtr]::Zero,
+        80, 70, 1000, 720, 0x0014)
+    $secondary = Start-Process -FilePath $Exe -ArgumentList $anchorFile -PassThru -Wait
+    if ($secondary.ExitCode -ne 0) {
+        throw "Secondary instance failed."
+    }
+    Wait-Title $workspaceProcess "anchor.md*"
+    Start-Sleep -Milliseconds 500
+    [void][P2RegressionNative]::SendMessage(
+        $workspaceProcess.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+    Wait-Process -Id $workspaceProcess.Id -Timeout 10
+} finally {
+    if ($workspaceProcess -and -not $workspaceProcess.HasExited) {
+        Stop-Process -Id $workspaceProcess.Id -Force
+    }
+}
+
+$workspaceFile = Join-Path $configRoot "liteMark\workspace.ini"
+$workspace = Get-Content -LiteralPath $workspaceFile -Raw
+if ($workspace -notmatch "tabs.count=2" -or
+    $workspace -notmatch "tabs.selected=1" -or
+    $workspace -notmatch "recent.count=2" -or
+    $workspace -notmatch "window.width=1000" -or
+    $workspace -notmatch "tab\.0\.scroll=([1-9][0-9]*)") {
+    throw "Workspace state did not contain the expected tabs, recents, or geometry."
+}
+
+$restoredProcess = Start-Process -FilePath $Exe -PassThru
+try {
+    Wait-Title $restoredProcess "anchor.md*"
+    Start-Sleep -Milliseconds 700
+    $restoredRect = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect(
+        $restoredProcess.MainWindowHandle, [ref]$restoredRect)
+    $restoredWindowWidth = $restoredRect.Right - $restoredRect.Left
+    if ([math]::Abs($restoredWindowWidth - 1000) -gt 16) {
+        throw "Restored window width was $restoredWindowWidth, expected 1000."
+    }
+    Focus-Window $restoredProcess.MainWindowHandle
+    Send-CtrlKey 0x09
+    Wait-Title $restoredProcess "selection.md*"
+    Start-Sleep -Milliseconds 500
+    $restoredDocument = Get-LargestChild $restoredProcess.MainWindowHandle
+    $restoredSelectionScroll = Get-VerticalScroll $restoredDocument.Handle
+    if ([math]::Abs($restoredSelectionScroll - $savedSelectionScroll) -gt 4) {
+        throw "Restored scroll was $restoredSelectionScroll, expected $savedSelectionScroll."
+    }
+} finally {
+    if ($restoredProcess -and -not $restoredProcess.HasExited) {
+        Stop-Process -Id $restoredProcess.Id -Force
+    }
+    Remove-Item Env:LITEMARK_CONFIG_DIR -ErrorAction SilentlyContinue
+}
+
+[pscustomobject]@{
+    CrossBlockCopy = "PASS"
+    DragHighlightPixels = $selectionPixels
+    SelectAllHighlightPixels = $selectAllPixels
+    InternalAnchorClick = "PASS ($anchorPosition px)"
+    WorkspaceTabs = "2"
+    RecentFiles = "2"
+    RestoredWindowWidth = $restoredWindowWidth
+    RestoredScroll = $restoredSelectionScroll
+    Result = "PASS"
+} | Format-List
