@@ -53,6 +53,7 @@ add_executable(litemark WIN32
     src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
     src/ui/MainFrame.cpp
+    src/ui/OutlineList.cpp
     src/ui/TabStrip.cpp
     src/ui/ThemeController.cpp
 )

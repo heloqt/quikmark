@@ -102,11 +102,12 @@ function Get-VisibleListBox([IntPtr]$Parent) {
     $items = [System.Collections.ArrayList]::new()
     [void][P2RegressionNative]::EnumChildWindows($Parent, {
         param($handle, $unused)
-        $name = [Text.StringBuilder]::new(128)
-        [void][P2RegressionNative]::GetClassName($handle, $name, 128)
-        if ($name.ToString() -eq 'ListBox' -and
-            [P2RegressionNative]::IsWindowVisible($handle)) {
-            [void]$items.Add($handle)
+        if ([P2RegressionNative]::IsWindowVisible($handle)) {
+            $count = [int][P2RegressionNative]::SendMessage(
+                $handle, 0x82BD, [IntPtr]::Zero, [IntPtr]::Zero)
+            if ($count -gt 0) {
+                [void]$items.Add($handle)
+            }
         }
         return $true
     }, [IntPtr]::Zero)
@@ -352,7 +353,7 @@ try {
         throw "Outline list was not visible after opening the drawer."
     }
     $outlineCount = [int][P2RegressionNative]::SendMessage(
-        $outlineList, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
+        $outlineList, 0x82BD, [IntPtr]::Zero, [IntPtr]::Zero)
     if ($outlineCount -lt 1) {
         throw "Outline drawer did not contain headings."
     }
@@ -476,6 +477,61 @@ try {
     if ($restoredProcess -and -not $restoredProcess.HasExited) {
         Stop-Process -Id $restoredProcess.Id -Force
     }
+}
+
+if (Test-Path -LiteralPath $configRoot) {
+    $resolved = (Resolve-Path -LiteralPath $configRoot).Path
+    if (-not $resolved.StartsWith(
+            $projectRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected test config path: $resolved"
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
+$env:LITEMARK_CONFIG_DIR = $configRoot
+$largeOutlineFile = Join-Path $projectRoot "doc\03-设计文档.md"
+$outlineWheelProcess = Start-Process -FilePath $Exe `
+    -ArgumentList $largeOutlineFile -PassThru
+try {
+    Wait-Title $outlineWheelProcess "*03-设计文档.md*"
+    Start-Sleep -Milliseconds 800
+    Send-MenuCommand $outlineWheelProcess.MainWindowHandle 2 4
+    $largeOutlineList = Get-VisibleListBox $outlineWheelProcess.MainWindowHandle
+    if ($largeOutlineList -eq $null) {
+        throw "Large document outline did not open."
+    }
+    $largeOutlineCount = [int][P2RegressionNative]::SendMessage(
+        $largeOutlineList, 0x82BD, [IntPtr]::Zero, [IntPtr]::Zero)
+    if ($largeOutlineCount -lt 80) {
+        throw "Large document outline was unexpectedly short."
+    }
+    $largeDocument = Get-LargestChild $outlineWheelProcess.MainWindowHandle
+    $documentScrollBefore = Get-VerticalScroll $largeDocument.Handle
+    $outlineTopBefore = [int][P2RegressionNative]::SendMessage(
+        $largeOutlineList, 0x82BE, [IntPtr]::Zero, [IntPtr]::Zero)
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    for ($i = 0; $i -lt 6; ++$i) {
+        [void][P2RegressionNative]::SendMessage(
+            $largeOutlineList, 0x020A, [IntPtr](-7864320), [IntPtr]::Zero)
+    }
+    $timer.Stop()
+    $outlineTopAfter = [int][P2RegressionNative]::SendMessage(
+        $largeOutlineList, 0x82BE, [IntPtr]::Zero, [IntPtr]::Zero)
+    $documentScrollAfter = Get-VerticalScroll $largeDocument.Handle
+    if ($outlineTopAfter -le $outlineTopBefore) {
+        throw "Outline wheel did not move the outline."
+    }
+    if ($documentScrollAfter -ne $documentScrollBefore) {
+        throw "Outline wheel leaked into the document."
+    }
+    if ($timer.ElapsedMilliseconds -gt 1000) {
+        throw "Outline wheel processing took $($timer.ElapsedMilliseconds) ms."
+    }
+    $outlineWheelMilliseconds = $timer.ElapsedMilliseconds
+} finally {
+    if ($outlineWheelProcess -and -not $outlineWheelProcess.HasExited) {
+        Stop-Process -Id $outlineWheelProcess.Id -Force
+    }
     Remove-Item Env:LITEMARK_CONFIG_DIR -ErrorAction SilentlyContinue
 }
 
@@ -487,6 +543,7 @@ try {
     OutlineSidebar = "PASS ($outlineCount items, $([math]::Round($outlineRatio * 100))%)"
     OutlineBodyReflow = "PASS ($documentWidthBefore -> $documentWidthAfter -> $documentWidthRestored)"
     OutlinePersistentState = "PASS"
+    OutlineWheel = "PASS ($largeOutlineCount items, $outlineWheelMilliseconds ms)"
     WorkspaceTabs = "2"
     RecentFiles = "2"
     RestoredWindowWidth = $restoredWindowWidth

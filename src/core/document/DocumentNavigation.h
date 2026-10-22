@@ -12,6 +12,7 @@ namespace litemark {
 
 struct HeadingAnchor {
     std::size_t blockIndex = 0;
+    int level = 1;
     std::string text;
     std::string slug;
 };

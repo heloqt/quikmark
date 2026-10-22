@@ -4,6 +4,7 @@
 #include "platform/windows/PerformanceTrace.h"
 #include "platform/windows/FileAssociation.h"
 #include "ui/DocumentView.h"
+#include "ui/OutlineList.h"
 #include "ui/TabStrip.h"
 
 #include <wx/dnd.h>
@@ -13,7 +14,6 @@
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/fswatcher.h>
-#include <wx/listbox.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
@@ -298,15 +298,8 @@ void MainFrame::UpdateOutline() {
         return;
     }
     updatingOutline_ = true;
-    outlineList_->Clear();
-    outlineSlugs_.clear();
     const auto headings = documentView_->OutlineHeadings();
-    for (const auto& heading : headings) {
-        outlineList_->Append(
-            wxString::FromUTF8(heading.text.data(), heading.text.size()));
-        outlineSlugs_.push_back(
-            wxString::FromUTF8(heading.slug.data(), heading.slug.size()));
-    }
+    outlineList_->SetItems(headings);
     updatingOutline_ = false;
     outlineList_->Show(!headings.empty());
     outlineEmptyText_->Show(headings.empty());
@@ -340,12 +333,11 @@ void MainFrame::OnOutlineItem(wxCommandEvent&) {
         return;
     }
     const int selected = outlineList_->GetSelection();
-    if (selected == wxNOT_FOUND ||
-        static_cast<std::size_t>(selected) >= outlineSlugs_.size()) {
+    if (selected == wxNOT_FOUND) {
         return;
     }
-    documentView_->ScrollToAnchor(U8("#") + outlineSlugs_[
-        static_cast<std::size_t>(selected)]);
+    documentView_->ScrollToAnchor(
+        U8("#") + outlineList_->SlugAt(static_cast<std::size_t>(selected)));
 }
 
 void MainFrame::OnFrameSize(wxSizeEvent& event) {
@@ -402,9 +394,7 @@ void MainFrame::CreateOutlinePanel() {
     titleFont.SetWeight(wxFONTWEIGHT_BOLD);
     title->SetFont(titleFont);
 
-    outlineList_ = new wxListBox(
-        outlinePanel_, ID_OUTLINE_LIST, wxDefaultPosition, wxDefaultSize,
-        0, nullptr, wxLB_SINGLE | wxLB_NEEDED_SB | wxBORDER_NONE);
+    outlineList_ = new OutlineList(outlinePanel_, ID_OUTLINE_LIST);
     outlineEmptyText_ = new wxStaticText(
         outlinePanel_, wxID_ANY, U8("当前文档没有标题"),
         wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
@@ -470,8 +460,7 @@ void MainFrame::ApplyTheme() {
     if (outlinePanel_ != nullptr) {
         outlinePanel_->SetBackgroundColour(palette.documentBackground);
         outlinePanel_->SetForegroundColour(palette.text);
-        outlineList_->SetBackgroundColour(palette.documentBackground);
-        outlineList_->SetForegroundColour(palette.text);
+        outlineList_->ApplyTheme(palette);
         outlineEmptyText_->SetForegroundColour(palette.mutedText);
     }
     UpdateAppearanceMenu();

@@ -60,6 +60,8 @@ void TestDuplicateHeadingSuffixes() {
           "duplicate heading should receive a deterministic suffix");
     Check(anchors[1].blockIndex == 2,
           "heading anchor should retain its block index");
+    Check(anchors[0].level == 2,
+          "heading anchor should retain its heading level");
 }
 
 void TestAnchorLookup() {

@@ -87,7 +87,8 @@ std::vector<HeadingAnchor> BuildHeadingAnchors(
         const int occurrence = used[base]++;
         const std::string slug =
             occurrence == 0 ? base : base + "-" + std::to_string(occurrence);
-        anchors.push_back(HeadingAnchor{index, text, slug});
+        anchors.push_back(
+            HeadingAnchor{index, block.headingLevel, text, slug});
     }
     return anchors;
 }

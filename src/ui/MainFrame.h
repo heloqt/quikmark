@@ -20,7 +20,6 @@
 class wxCommandEvent;
 class wxCloseEvent;
 class wxKeyEvent;
-class wxListBox;
 class wxBoxSizer;
 class wxFileSystemWatcherEvent;
 class wxMenu;
@@ -34,6 +33,7 @@ class wxTimerEvent;
 namespace litemark {
 
 class DocumentView;
+class OutlineList;
 class TabStrip;
 
 class MainFrame : public wxFrame {
@@ -129,9 +129,8 @@ private:
     wxStaticText* changeText_ = nullptr;
     wxPanel* outlinePanel_ = nullptr;
     wxBoxSizer* contentSizer_ = nullptr;
-    wxListBox* outlineList_ = nullptr;
+    OutlineList* outlineList_ = nullptr;
     wxStaticText* outlineEmptyText_ = nullptr;
-    std::vector<wxString> outlineSlugs_;
     bool updatingOutline_ = false;
     wxMenu* recentMenu_ = nullptr;
     std::vector<std::unique_ptr<ParseTask>> parseTasks_;
