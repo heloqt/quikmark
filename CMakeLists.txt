@@ -155,6 +155,19 @@ if(LITEMARK_BUILD_TESTS)
     add_test(NAME markdown_prefix_boundary
         COMMAND litemark_markdown_prefix_tests)
 
+    add_executable(litemark_list_layout_tests
+        tests/list_layout_tests.cpp
+    )
+    target_include_directories(litemark_list_layout_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_list_layout_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME list_layout COMMAND litemark_list_layout_tests)
+
     add_executable(litemark_tab_manager_tests
         tests/tab_manager_tests.cpp
         src/core/flow/Flowchart.cpp
@@ -332,6 +345,7 @@ if(LITEMARK_BUILD_TESTS)
         pending_scroll_state
         parser_smoke
         markdown_prefix_boundary
+        list_layout
         tab_manager_state
         resource_policy
         flowchart_whitelist

@@ -3,6 +3,7 @@
 #include "core/document/DocumentNavigation.h"
 #include "core/document/DocumentText.h"
 #include "core/flow/Flowchart.h"
+#include "core/layout/ListLayout.h"
 #include "core/policy/ResourcePolicy.h"
 #include "platform/windows/ImageDownloader.h"
 #include "platform/windows/PerformanceTrace.h"
@@ -150,6 +151,7 @@ struct BlockLayout {
     std::unique_ptr<FlowchartLayout> flowchart;
     wxString marker;
     int markerX = 0;
+    int markerGutter = 0;
     int markerY = 0;
 };
 
@@ -1389,13 +1391,12 @@ struct DocumentView::Impl {
         for (const Block& block : document->blocks) {
             const int quoteIndent = static_cast<int>(
                 std::lround(block.quoteDepth * 18 * scale));
-            const int listIndent =
-                block.listDepth > 0
-                    ? static_cast<int>(std::lround(
-                          (block.listDepth - 1) * 22 * scale))
-                    : 0;
+            const ListLayoutMetrics listLayout = ComputeListLayout(
+                block.listDepth, block.listOrdered, block.listIndex,
+                scale, fontScale);
             const int width =
-                std::max(80, maxContentWidth - quoteIndent - listIndent);
+                std::max(80, maxContentWidth - quoteIndent -
+                                  listLayout.textOffset);
             const int estimatedHeight = EstimateHeight(block, width, scale);
             layout->slots.push_back(
                 BlockSlot{estimatedHeight, -1});
@@ -1426,14 +1427,16 @@ struct DocumentView::Impl {
             std::max(120, clientWidth - pageMargin * 2);
         const int quoteIndent =
             static_cast<int>(std::lround(block.quoteDepth * 18 * scale));
-        const int listIndent =
-            block.listDepth > 0
-                ? static_cast<int>(
-                      std::lround((block.listDepth - 1) * 22 * scale))
-                : 0;
-        const int x = pageMargin + quoteIndent + listIndent;
+        const ListLayoutMetrics listLayout = ComputeListLayout(
+            block.listDepth, block.listOrdered, block.listIndex,
+            scale, fontScale);
+        const int listMarkerX =
+            pageMargin + quoteIndent + listLayout.markerOffset;
+        const int x =
+            pageMargin + quoteIndent + listLayout.textOffset;
         const int width =
-            std::max(80, maxContentWidth - quoteIndent - listIndent);
+            std::max(80, maxContentWidth - quoteIndent -
+                              listLayout.textOffset);
         const int before =
             static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
         const int after =
@@ -1465,17 +1468,13 @@ struct DocumentView::Impl {
             item.height = item.text.height + padding * 2;
         } else {
             TextStyle style = BaseStyle(block);
-            const int markerWidth =
-                block.listMarker
-                    ? static_cast<int>(std::lround(27 * scale))
-                    : 0;
-            BuildTextLayout(dc, item.text, width - markerWidth, block.spans,
+            BuildTextLayout(dc, item.text, width, block.spans,
                             style, fontScale, &fonts);
             item.height = item.text.height;
             if (block.listMarker) {
                 item.marker = BlockMarker(block);
-                item.markerX =
-                    x - static_cast<int>(std::lround(26 * scale));
+                item.markerX = listMarkerX;
+                item.markerGutter = listLayout.markerGutter;
                 item.markerY = item.y;
             }
         }
@@ -2035,7 +2034,15 @@ struct DocumentView::Impl {
                     markerStyle.bold = block.task;
                     dc.SetFont(FontFor(markerStyle));
                     dc.SetTextForeground(palette.mutedText);
-                    dc.DrawText(item.marker, item.markerX, item.markerY);
+                    int markerX = item.markerX;
+                    if (block.listOrdered) {
+                        const int markerWidth =
+                            dc.GetTextExtent(item.marker).x;
+                        markerX += std::max(
+                            0, item.markerGutter - FromDIPValue(5) -
+                                   markerWidth);
+                    }
+                    dc.DrawText(item.marker, markerX, item.markerY);
                 }
                 DrawTextLayout(dc, item.text, item.x, item.y, false,
                                selection, searchRangesPtr, activeSearchPtr);
