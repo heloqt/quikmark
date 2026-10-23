@@ -47,8 +47,12 @@ wxString U8(const char* text) {
 struct ParseCompletion {
     std::uint64_t tabId = 0;
     std::uint64_t generation = 0;
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
+    double parseMicroseconds = 0;
+    litemark::FileLoadTimings timings;
+    bool provisional = false;
+    bool firstVisible = true;
     wxString error;
 };
 
@@ -889,16 +893,45 @@ void MainFrame::StartParse(const TabSession& tab) {
     rawTask->thread = std::thread(
         [this, path, cancelled, tabId, generation]() {
             wxString error;
-            wxString content;
+            std::string content;
             std::shared_ptr<const MarkdownDocument> document;
+            FileLoadTimings timings;
+            bool prefixQueued = false;
+            const auto parseStarted = std::chrono::steady_clock::now();
             try {
                 TabManager::LoadFileAndParse(path, cancelled.get(), &content,
-                                             &document, &error);
+                                             &document, &error, &timings,
+                    [this, cancelled, tabId, generation, &prefixQueued](
+                        std::shared_ptr<const MarkdownDocument> prefix) {
+                        if (cancelled->load(std::memory_order_relaxed)) {
+                            return;
+                        }
+                        prefixQueued = true;
+                        auto* event = new wxThreadEvent(
+                            wxEVT_THREAD, ID_PARSE_COMPLETED);
+                        event->SetPayload(ParseCompletion{
+                            tabId,
+                            generation,
+                            {},
+                            std::move(prefix),
+                            0,
+                            {},
+                            true,
+                            true,
+                            {},
+                        });
+                        wxQueueEvent(this, event);
+                    });
             } catch (const std::exception& exception) {
                 error = wxString::FromUTF8(exception.what());
             } catch (...) {
                 error = U8("未知的 Markdown 解析错误");
             }
+            const auto parseFinished = std::chrono::steady_clock::now();
+            const double parseMicroseconds = static_cast<double>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    parseFinished - parseStarted)
+                    .count());
 
             if (cancelled->load(std::memory_order_relaxed)) {
                 return;
@@ -911,6 +944,10 @@ void MainFrame::StartParse(const TabSession& tab) {
                 generation,
                 std::move(content),
                 std::move(document),
+                parseMicroseconds,
+                timings,
+                false,
+                !prefixQueued,
                 std::move(error),
             });
             wxQueueEvent(this, event);
@@ -931,10 +968,13 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
                      wxOK | wxICON_WARNING, this);
     }
     if (current != nullptr && current->id == result.tabId) {
+        if (!result.provisional && coldStartTraced_) {
+            SaveCurrentScroll();
+        }
         UpdateFromTabs();
         if (result.document) {
             const auto start = parseStartTimes_.find(result.tabId);
-            if (start != parseStartTimes_.end()) {
+            if (result.firstVisible && start != parseStartTimes_.end()) {
                 documentView_->TraceNextPaint("hot_open", start->second);
                 if (!coldStartTraced_) {
                     documentView_->TraceNextPaintProcessAge("cold_start");
@@ -958,7 +998,20 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     } else {
         UpdateTabStrip();
     }
-    parseStartTimes_.erase(result.tabId);
+    if (!result.provisional && result.parseMicroseconds > 0) {
+        // Recorded after the synchronous first paint so the trace write does
+        // not inflate cold_start or hot_open on this sample.
+        TraceEvent("parse", result.parseMicroseconds);
+        TraceEvent("file_read", result.timings.fileReadMicroseconds);
+        TraceEvent("utf8_convert", result.timings.utf8ConvertMicroseconds);
+        TraceEvent("prefix_md4c_parse",
+                   result.timings.prefixMd4cMicroseconds);
+        TraceEvent("md4c_parse", result.timings.md4cMicroseconds);
+        TraceEvent("normalize", result.timings.normalizeMicroseconds);
+    }
+    if (!result.provisional) {
+        parseStartTimes_.erase(result.tabId);
+    }
 }
 
 void MainFrame::WatchFile(const wxString& path) {
@@ -1013,7 +1066,7 @@ void MainFrame::OnChangeTimer(wxTimerEvent&) {
 void MainFrame::SaveCurrentScroll() {
     if (TabSession* current = tabs_.selectedMutable()) {
         if (current->document) {
-            current->scrollY = documentView_->ScrollY();
+            current->scrollY = documentView_->RequestedScrollY();
         }
     }
 }

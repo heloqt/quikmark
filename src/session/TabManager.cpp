@@ -1,11 +1,13 @@
 #include "session/TabManager.h"
 
+#include "core/parser/MarkdownPrefix.h"
 #include "core/parser/MarkdownParser.h"
 
 #include <wx/file.h>
 #include <wx/filename.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -111,7 +113,7 @@ TabOpenResult TabManager::ReloadSelected(wxString* error) {
 
 bool TabManager::CompleteParse(
     std::uint64_t tabId, std::uint64_t generation,
-    const wxString& content,
+    const std::string& content,
     std::shared_ptr<const MarkdownDocument> document, const wxString& error) {
     TabSession* session = FindById(tabId, generation);
     if (session == nullptr) {
@@ -155,13 +157,17 @@ void TabManager::DismissChangeNotice() {
 
 bool TabManager::LoadFileAndParse(
     const wxString& path, const std::atomic_bool* cancelled,
-    wxString* content, std::shared_ptr<const MarkdownDocument>* document,
-    wxString* error) {
+    std::string* content, std::shared_ptr<const MarkdownDocument>* document,
+    wxString* error, FileLoadTimings* timings,
+    const PartialDocumentCallback& onPartial) {
+    if (timings != nullptr) {
+        *timings = {};
+    }
     if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
         SetError(error, "加载已取消");
         return false;
     }
-    if (!ReadUtf8File(path, content, error)) {
+    if (!ReadUtf8File(path, content, error, timings)) {
         return false;
     }
     if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
@@ -169,10 +175,32 @@ bool TabManager::LoadFileAndParse(
         return false;
     }
 
-    const wxScopedCharBuffer utf8 = content->ToUTF8();
+    if (onPartial && content->size() > kMarkdownPrefixBytes) {
+        const std::size_t boundary =
+            FindSafeMarkdownPrefixBoundary(*content);
+        if (boundary > 0 && boundary < content->size()) {
+            std::string prefixError;
+            double prefixMd4cMicroseconds = 0;
+            const std::string_view prefix(content->data(), boundary);
+            auto prefixDocument = MarkdownParser::Parse(
+                prefix, &prefixError, cancelled, &prefixMd4cMicroseconds);
+            if (timings != nullptr) {
+                timings->prefixMd4cMicroseconds =
+                    prefixMd4cMicroseconds;
+            }
+            if (prefixDocument &&
+                (cancelled == nullptr ||
+                 !cancelled->load(std::memory_order_relaxed))) {
+                onPartial(std::move(prefixDocument));
+            }
+        }
+    }
+
     std::string parseError;
     auto parsed = MarkdownParser::Parse(
-        std::string(utf8.data(), utf8.length()), &parseError, cancelled);
+        *content, &parseError, cancelled,
+        timings != nullptr ? &timings->md4cMicroseconds : nullptr,
+        timings != nullptr ? &timings->normalizeMicroseconds : nullptr);
     if (!parsed) {
         if (error != nullptr) {
             *error = wxString::FromUTF8(parseError.c_str());
@@ -237,7 +265,12 @@ TabSession* TabManager::selectedMutable() {
     return const_cast<TabSession*>(static_cast<const TabManager&>(*this).selected());
 }
 
-bool TabManager::ReadUtf8File(const wxString& path, wxString* text, wxString* error) {
+bool TabManager::ReadUtf8File(
+    const wxString& path,
+    std::string* text,
+    wxString* error,
+    FileLoadTimings* timings) {
+    const auto readStarted = std::chrono::steady_clock::now();
     wxFileName fileInfo(path);
     if (!fileInfo.FileExists()) {
         SetError(error, "文件不存在");
@@ -265,7 +298,15 @@ bool TabManager::ReadUtf8File(const wxString& path, wxString* text, wxString* er
         SetError(error, "读取文件失败");
         return false;
     }
+    const auto readFinished = std::chrono::steady_clock::now();
+    if (timings != nullptr) {
+        timings->fileReadMicroseconds = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                readFinished - readStarted)
+                .count());
+    }
 
+    const auto convertStarted = std::chrono::steady_clock::now();
     std::size_t offset = 0;
     if (bytes.size() >= 3 &&
         static_cast<unsigned char>(bytes[0]) == 0xEFU &&
@@ -279,7 +320,16 @@ bool TabManager::ReadUtf8File(const wxString& path, wxString* text, wxString* er
         return false;
     }
 
-    *text = wxString::FromUTF8(bytes.data() + offset, bytes.size() - offset);
+    if (offset > 0) {
+        bytes.erase(0, offset);
+    }
+    *text = std::move(bytes);
+    if (timings != nullptr) {
+        timings->utf8ConvertMicroseconds = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - convertStarted)
+                .count());
+    }
     return true;
 }
 

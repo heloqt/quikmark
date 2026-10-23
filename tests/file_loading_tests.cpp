@@ -63,13 +63,13 @@ void TestPlainUtf8() {
     const std::string text = "# 标题\n\n中文正文\n";
     WriteBytes(path, std::vector<unsigned char>(text.begin(), text.end()));
 
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     const bool ok = litemark::TabManager::LoadFileAndParse(
         WxPath(path), nullptr, &content, &document, &error);
     Check(ok, "plain UTF-8 file should load");
-    Check(content == wxString::FromUTF8(text.c_str()),
+    Check(content == text,
           "plain UTF-8 content mismatch");
     Check(document && !document->blocks.empty(),
           "loaded Markdown should be parsed");
@@ -84,14 +84,51 @@ void TestUtf8Bom() {
     bytes.insert(bytes.end(), body.begin(), body.end());
     WriteBytes(path, bytes);
 
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     const bool ok = litemark::TabManager::LoadFileAndParse(
         WxPath(path), nullptr, &content, &document, &error);
     Check(ok, "UTF-8 BOM file should load");
-    Check(content == wxString::FromUTF8(body.c_str()),
+    Check(content == body,
           "UTF-8 BOM should be removed from content");
+}
+
+void TestPartialDocumentIsPublishedBeforeFullParse() {
+    TempDirectory temp;
+    const auto path = temp.File("large.md");
+    const std::string text =
+        std::string(20000, 'a') + "\n\n# later\n\n" +
+        std::string(20000, 'b') + "\n";
+    WriteBytes(path, std::vector<unsigned char>(text.begin(), text.end()));
+
+    std::string content;
+    std::shared_ptr<const litemark::MarkdownDocument> document;
+    wxString error;
+    litemark::FileLoadTimings timings;
+    int partialCalls = 0;
+    std::size_t partialBlocks = 0;
+    bool fullWasStillEmpty = false;
+    const bool ok = litemark::TabManager::LoadFileAndParse(
+        WxPath(path), nullptr, &content, &document, &error, &timings,
+        [&](std::shared_ptr<const litemark::MarkdownDocument> partial) {
+            ++partialCalls;
+            fullWasStillEmpty = document == nullptr;
+            partialBlocks = partial ? partial->blocks.size() : 0;
+        });
+
+    Check(ok, "large UTF-8 file should load");
+    Check(partialCalls == 1,
+          "large file should publish exactly one partial document");
+    Check(fullWasStillEmpty,
+          "partial document must be published before the full result");
+    Check(partialBlocks > 0 && document &&
+              document->blocks.size() >= partialBlocks,
+          "partial document should be a non-empty prefix");
+    Check(timings.prefixMd4cMicroseconds > 0,
+          "prefix parse timing should be recorded");
+    Check(timings.md4cMicroseconds > 0,
+          "full md4c timing should be recorded");
 }
 
 void TestInvalidUtf8VariantsAreRejected() {
@@ -111,7 +148,7 @@ void TestInvalidUtf8VariantsAreRejected() {
     for (const auto& item : cases) {
         const auto path = temp.File(item.name);
         WriteBytes(path, item.bytes);
-        wxString content;
+        std::string content;
         std::shared_ptr<const litemark::MarkdownDocument> document;
         wxString error;
         const bool ok = litemark::TabManager::LoadFileAndParse(
@@ -130,7 +167,7 @@ void TestEmptyFile() {
     const auto path = temp.File("empty.md");
     WriteBytes(path, {});
 
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     const bool ok = litemark::TabManager::LoadFileAndParse(
@@ -143,7 +180,7 @@ void TestEmptyFile() {
 
 void TestMissingFile() {
     TempDirectory temp;
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     const bool ok = litemark::TabManager::LoadFileAndParse(
@@ -160,7 +197,7 @@ void TestPreCancelledRead() {
     const std::string text = "# cancel\n";
     WriteBytes(path, std::vector<unsigned char>(text.begin(), text.end()));
 
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     std::atomic_bool cancelled{true};
@@ -180,7 +217,7 @@ void TestOversizedFileIsRejectedBeforeReading() {
     output.put('\0');
     output.close();
 
-    wxString content;
+    std::string content;
     std::shared_ptr<const litemark::MarkdownDocument> document;
     wxString error;
     const bool ok = litemark::TabManager::LoadFileAndParse(
@@ -201,6 +238,7 @@ int main() {
 
     TestPlainUtf8();
     TestUtf8Bom();
+    TestPartialDocumentIsPublishedBeforeFullParse();
     TestInvalidUtf8VariantsAreRejected();
     TestEmptyFile();
     TestMissingFile();
@@ -211,6 +249,6 @@ int main() {
                   << " check(s) failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "file_loading_tests: 7 cases passed\n";
+    std::cout << "file_loading_tests: 8 cases passed\n";
     return EXIT_SUCCESS;
 }

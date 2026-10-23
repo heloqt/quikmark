@@ -226,6 +226,15 @@ for ($i = 0; $i -lt $Samples; ++$i) {
     $process = Start-Process -FilePath $Exe -ArgumentList $fixtures[$i] -PassThru
     try {
         Wait-MetricCount $coldTrace "cold_start" ($i + 1)
+        Wait-MetricCount $coldTrace "parse" ($i + 1)
+        Wait-MetricCount $coldTrace "file_read" ($i + 1)
+        Wait-MetricCount $coldTrace "utf8_convert" ($i + 1)
+        Wait-MetricCount $coldTrace "prefix_md4c_parse" ($i + 1)
+        Wait-MetricCount $coldTrace "md4c_parse" ($i + 1)
+        Wait-MetricCount $coldTrace "normalize" ($i + 1)
+        Wait-MetricCount $coldTrace "layout_init" ($i + 1)
+        Wait-MetricCount $coldTrace "visible_layout" ($i + 1)
+        Wait-MetricCount $coldTrace "draw" ($i + 1)
     } finally {
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force
@@ -235,6 +244,15 @@ for ($i = 0; $i -lt $Samples; ++$i) {
     Start-Sleep -Milliseconds 80
 }
 $coldStats = Get-Stats (Read-Metric $coldTrace "cold_start")
+$coldParseStats = Get-Stats (Read-Metric $coldTrace "parse")
+$coldFileReadStats = Get-Stats (Read-Metric $coldTrace "file_read")
+$coldUtf8Stats = Get-Stats (Read-Metric $coldTrace "utf8_convert")
+$coldPrefixStats = Get-Stats (Read-Metric $coldTrace "prefix_md4c_parse")
+$coldMd4cStats = Get-Stats (Read-Metric $coldTrace "md4c_parse")
+$coldNormalizeStats = Get-Stats (Read-Metric $coldTrace "normalize")
+$coldLayoutInitStats = Get-Stats (Read-Metric $coldTrace "layout_init")
+$coldVisibleLayoutStats = Get-Stats (Read-Metric $coldTrace "visible_layout")
+$coldDrawStats = Get-Stats (Read-Metric $coldTrace "draw")
 Write-Host "Completed regular cold-start samples: $($coldStats.Samples)"
 
 # Hot open followed by tab switching in one primary process.
@@ -278,6 +296,15 @@ for ($i = 0; $i -lt $largeSamples; ++$i) {
     $process = Start-Process -FilePath $Exe -ArgumentList $largeFixtures[$i] -PassThru
     try {
         Wait-MetricCount $largeColdTrace "cold_start" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "parse" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "file_read" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "utf8_convert" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "prefix_md4c_parse" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "md4c_parse" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "normalize" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "layout_init" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "visible_layout" ($i + 1) 60
+        Wait-MetricCount $largeColdTrace "draw" ($i + 1) 60
     } finally {
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force
@@ -287,6 +314,15 @@ for ($i = 0; $i -lt $largeSamples; ++$i) {
     Start-Sleep -Milliseconds 100
 }
 $largeColdStats = Get-Stats (Read-Metric $largeColdTrace "cold_start")
+$largeParseStats = Get-Stats (Read-Metric $largeColdTrace "parse")
+$largeFileReadStats = Get-Stats (Read-Metric $largeColdTrace "file_read")
+$largeUtf8Stats = Get-Stats (Read-Metric $largeColdTrace "utf8_convert")
+$largePrefixStats = Get-Stats (Read-Metric $largeColdTrace "prefix_md4c_parse")
+$largeMd4cStats = Get-Stats (Read-Metric $largeColdTrace "md4c_parse")
+$largeNormalizeStats = Get-Stats (Read-Metric $largeColdTrace "normalize")
+$largeLayoutInitStats = Get-Stats (Read-Metric $largeColdTrace "layout_init")
+$largeVisibleLayoutStats = Get-Stats (Read-Metric $largeColdTrace "visible_layout")
+$largeDrawStats = Get-Stats (Read-Metric $largeColdTrace "draw")
 Write-Host "Completed 10 MB cold-start samples: $($largeColdStats.Samples)"
 
 # Keep one process warm and open each 10 MB document as its own tab.
@@ -402,12 +438,34 @@ $result = [pscustomobject]@{
     TabSwitchMs = $switchStats
     ScrollMs = $scrollStats
     PaintMs = $paintStats
+    ColdStartBreakdown = [pscustomobject]@{
+        ParseMs = $coldParseStats
+        FileReadMs = $coldFileReadStats
+        Utf8ConvertMs = $coldUtf8Stats
+        PrefixMd4cParseMs = $coldPrefixStats
+        Md4cParseMs = $coldMd4cStats
+        NormalizeMs = $coldNormalizeStats
+        LayoutInitMs = $coldLayoutInitStats
+        VisibleLayoutMs = $coldVisibleLayoutStats
+        DrawMs = $coldDrawStats
+    }
     Large10MB = [pscustomobject]@{
         ColdStartMs = $largeColdStats
         HotOpenMs = $largeHotStats
         TabSwitchMs = $largeSwitchStats
         ScrollMs = $largeScrollStats
         PaintMs = $largePaintStats
+        ColdStartBreakdown = [pscustomobject]@{
+            ParseMs = $largeParseStats
+            FileReadMs = $largeFileReadStats
+            Utf8ConvertMs = $largeUtf8Stats
+            PrefixMd4cParseMs = $largePrefixStats
+            Md4cParseMs = $largeMd4cStats
+            NormalizeMs = $largeNormalizeStats
+            LayoutInitMs = $largeLayoutInitStats
+            VisibleLayoutMs = $largeVisibleLayoutStats
+            DrawMs = $largeDrawStats
+        }
         ColdStartChallengePass = $largeColdStats.P95 -le 300
     }
     Pass = (

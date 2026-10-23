@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -22,7 +23,7 @@ struct TabSession {
     std::uint64_t generation = 0;
     wxString path;
     wxString title;
-    wxString content;
+    std::string content;
     std::shared_ptr<const MarkdownDocument> document;
     DocumentLoadState loadState = DocumentLoadState::Loading;
     wxString parseError;
@@ -37,12 +38,23 @@ enum class TabOpenResult {
     Failed
 };
 
+struct FileLoadTimings {
+    double fileReadMicroseconds = 0;
+    double utf8ConvertMicroseconds = 0;
+    double prefixMd4cMicroseconds = 0;
+    double md4cMicroseconds = 0;
+    double normalizeMicroseconds = 0;
+};
+
+using PartialDocumentCallback =
+    std::function<void(std::shared_ptr<const MarkdownDocument>)>;
+
 class TabManager {
 public:
     TabOpenResult OpenFile(const wxString& path);
     TabOpenResult ReloadSelected(wxString* error = nullptr);
     bool CompleteParse(std::uint64_t tabId, std::uint64_t generation,
-                       const wxString& content,
+                       const std::string& content,
                        std::shared_ptr<const MarkdownDocument> document,
                        const wxString& error);
     bool MarkExternalChange(const wxString& path);
@@ -51,9 +63,11 @@ public:
     static bool LoadFileAndParse(
         const wxString& path,
         const std::atomic_bool* cancelled,
-        wxString* content,
+        std::string* content,
         std::shared_ptr<const MarkdownDocument>* document,
-        wxString* error);
+        wxString* error,
+        FileLoadTimings* timings = nullptr,
+        const PartialDocumentCallback& onPartial = {});
 
     void Activate(std::size_t index);
     void ActivateNext();
@@ -66,7 +80,11 @@ public:
     TabSession* selectedMutable();
 
 private:
-    static bool ReadUtf8File(const wxString& path, wxString* text, wxString* error);
+    static bool ReadUtf8File(
+        const wxString& path,
+        std::string* text,
+        wxString* error,
+        FileLoadTimings* timings);
     static wxString NormalizePath(const wxString& path);
     int FindPath(const wxString& normalizedPath) const;
     TabSession* FindById(std::uint64_t tabId, std::uint64_t generation);

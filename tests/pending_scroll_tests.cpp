@@ -58,7 +58,15 @@ void TestLatestRequestWins() {
 void TestTakeClearsTheRequest() {
     litemark::PendingScrollPosition pending;
     pending.Request(420);
+    Check(pending.Peek().has_value() && *pending.Peek() == 420,
+          "peek should expose the request without consuming it");
+    Check(pending.HasPending(), "peek should not clear the request");
     Check(pending.Take().has_value(), "first take should return the request");
+    Check(pending.Peek().has_value() && *pending.Peek() == 420,
+          "taken request should remain requested until marked applied");
+    pending.MarkApplied();
+    Check(!pending.Peek().has_value(),
+          "mark applied should clear the in-flight request");
     Check(!pending.HasPending(), "take should clear the request");
     Check(!pending.Take().has_value(), "second take should return empty");
 }

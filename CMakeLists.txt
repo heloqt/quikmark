@@ -52,6 +52,7 @@ add_executable(litemark WIN32
     src/core/document/DocumentNavigation.cpp
     src/core/document/DocumentSearch.cpp
     src/core/document/DocumentText.cpp
+    src/core/parser/MarkdownPrefix.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/windows/FileAssociation.cpp
     src/platform/windows/ImageDownloader.cpp
@@ -138,9 +139,25 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME parser_smoke COMMAND litemark_parser_tests)
 
+    add_executable(litemark_markdown_prefix_tests
+        tests/markdown_prefix_tests.cpp
+        src/core/parser/MarkdownPrefix.cpp
+    )
+    target_include_directories(litemark_markdown_prefix_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_markdown_prefix_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME markdown_prefix_boundary
+        COMMAND litemark_markdown_prefix_tests)
+
     add_executable(litemark_tab_manager_tests
         tests/tab_manager_tests.cpp
         src/core/flow/Flowchart.cpp
+        src/core/parser/MarkdownPrefix.cpp
         src/core/parser/MarkdownParser.cpp
         src/session/TabManager.cpp
     )
@@ -213,6 +230,7 @@ if(LITEMARK_BUILD_TESTS)
     add_executable(litemark_file_loading_tests
         tests/file_loading_tests.cpp
         src/core/flow/Flowchart.cpp
+        src/core/parser/MarkdownPrefix.cpp
         src/core/parser/MarkdownParser.cpp
         src/session/TabManager.cpp
     )
@@ -312,6 +330,7 @@ if(LITEMARK_BUILD_TESTS)
     set_tests_properties(
         pending_scroll_state
         parser_smoke
+        markdown_prefix_boundary
         tab_manager_state
         resource_policy
         flowchart_whitelist

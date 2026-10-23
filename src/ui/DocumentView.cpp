@@ -200,6 +200,7 @@ struct BlockSlot {
 struct ViewLayout {
     std::vector<BlockSlot> slots;
     std::map<std::size_t, BlockLayout> blockLayouts;
+    int estimatedTotalHeight = 0;
     int width = 0;
 };
 
@@ -1311,8 +1312,7 @@ struct DocumentView::Impl {
         return static_cast<int>(std::lround(34 * Scale(dc)));
     }
 
-    int EstimateHeight(wxDC& dc, const Block& block, int width) const {
-        const double scale = Scale(dc);
+    int EstimateHeight(const Block& block, int width, double scale) const {
         const int before =
             static_cast<int>(std::lround(IntrinsicBefore(block) * scale));
         const int after =
@@ -1384,19 +1384,22 @@ struct DocumentView::Impl {
         const int pageMargin = PageMargin(dc);
         const int maxContentWidth =
             std::max(120, clientWidth - pageMargin * 2);
+        const double scale = Scale(dc);
         layout->slots.reserve(document->blocks.size());
         for (const Block& block : document->blocks) {
             const int quoteIndent = static_cast<int>(
-                std::lround(block.quoteDepth * 18 * Scale(dc)));
+                std::lround(block.quoteDepth * 18 * scale));
             const int listIndent =
                 block.listDepth > 0
                     ? static_cast<int>(std::lround(
-                          (block.listDepth - 1) * 22 * Scale(dc)))
+                          (block.listDepth - 1) * 22 * scale))
                     : 0;
             const int width =
                 std::max(80, maxContentWidth - quoteIndent - listIndent);
+            const int estimatedHeight = EstimateHeight(block, width, scale);
             layout->slots.push_back(
-                BlockSlot{EstimateHeight(dc, block, width), -1});
+                BlockSlot{estimatedHeight, -1});
+            layout->estimatedTotalHeight += estimatedHeight;
         }
 
         if (document) {
@@ -1411,14 +1414,7 @@ struct DocumentView::Impl {
     }
 
     int TotalHeight() const {
-        if (!layout) {
-            return 0;
-        }
-        int total = 0;
-        for (const auto& slot : layout->slots) {
-            total += SlotHeight(slot);
-        }
-        return total;
+        return layout ? layout->estimatedTotalHeight : 0;
     }
 
     BlockLayout BuildBlockLayout(wxDC& dc, std::size_t index, int y,
@@ -1486,7 +1482,9 @@ struct DocumentView::Impl {
 
         const int actualHeight = before + item.height + after;
         BlockSlot& slot = layout->slots[index];
+        const int previousHeight = SlotHeight(slot);
         slot.actualHeight = std::max(1, actualHeight);
+        layout->estimatedTotalHeight += slot.actualHeight - previousHeight;
         return item;
     }
 
@@ -2518,6 +2516,13 @@ int DocumentView::ScrollY() const {
     return y;
 }
 
+int DocumentView::RequestedScrollY() const {
+    if (const auto pending = impl_->pendingScrollY.Peek()) {
+        return *pending;
+    }
+    return ScrollY();
+}
+
 void DocumentView::SelectAll() {
     if (!impl_->document || impl_->document->blocks.empty()) {
         return;
@@ -2877,8 +2882,9 @@ void DocumentView::OnLeftUp(wxMouseEvent& event) {
 }
 
 void DocumentView::OnPaint(wxPaintEvent&) {
+    const bool traceEnabled = PerformanceTraceEnabled();
     const std::optional<std::chrono::steady_clock::time_point> paintStart =
-        PerformanceTraceEnabled()
+        traceEnabled
             ? std::optional<std::chrono::steady_clock::time_point>(
                   std::chrono::steady_clock::now())
             : std::nullopt;
@@ -2900,9 +2906,20 @@ void DocumentView::OnPaint(wxPaintEvent&) {
         return;
     }
 
+    std::optional<double> layoutInitMicroseconds;
     if (!impl_->layout || impl_->layoutDirty ||
         impl_->layoutWidth != client.x) {
+        std::optional<std::chrono::steady_clock::time_point> initStart;
+        if (traceEnabled) {
+            initStart = std::chrono::steady_clock::now();
+        }
         impl_->InitializeLayout(dc, client.x);
+        if (initStart) {
+            layoutInitMicroseconds = static_cast<double>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - *initStart)
+                    .count());
+        }
     }
 
     const int pageMargin = impl_->PageMargin(dc);
@@ -2910,6 +2927,8 @@ void DocumentView::OnPaint(wxPaintEvent&) {
     const int layoutStart = std::max(0, scrollY - client.y);
     const int layoutEnd = viewBottom + client.y;
     int y = pageMargin;
+    double visibleLayoutMicroseconds = 0;
+    double drawMicroseconds = 0;
 
     for (std::size_t i = 0; i < impl_->layout->slots.size(); ++i) {
         const int height = impl_->SlotHeight(impl_->layout->slots[i]);
@@ -2921,11 +2940,31 @@ void DocumentView::OnPaint(wxPaintEvent&) {
             break;
         }
 
+        std::optional<std::chrono::steady_clock::time_point> layoutStartTime;
+        if (traceEnabled) {
+            layoutStartTime = std::chrono::steady_clock::now();
+        }
         const BlockLayout& blockLayout =
             impl_->LayoutFor(dc, i, y, client.x);
+        if (layoutStartTime) {
+            visibleLayoutMicroseconds += static_cast<double>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - *layoutStartTime)
+                    .count());
+        }
         if (blockLayout.y + blockLayout.height >= scrollY &&
             blockLayout.y <= viewBottom) {
+            std::optional<std::chrono::steady_clock::time_point> drawStart;
+            if (traceEnabled) {
+                drawStart = std::chrono::steady_clock::now();
+            }
             impl_->DrawBlock(dc, blockLayout);
+            if (drawStart) {
+                drawMicroseconds += static_cast<double>(
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - *drawStart)
+                        .count());
+            }
         }
         y += impl_->SlotHeight(impl_->layout->slots[i]);
     }
@@ -2940,6 +2979,7 @@ void DocumentView::OnPaint(wxPaintEvent&) {
     if (const auto target = impl_->pendingScrollY.Take()) {
         CallAfter([this, target]() {
             Scroll(0, *target);
+            impl_->pendingScrollY.MarkApplied();
             impl_->suppressSizeReadingAnchor = false;
         });
     }
@@ -2961,6 +3001,8 @@ void DocumentView::OnPaint(wxPaintEvent&) {
         if (scrollMicroseconds) {
             TraceEvent("scroll", *scrollMicroseconds);
         }
+        const bool hasPendingPaintTraces =
+            !impl_->pendingPaintTraces.empty();
         for (const Impl::PendingPaintTrace& trace :
              impl_->pendingPaintTraces) {
             const double microseconds =
@@ -2972,6 +3014,15 @@ void DocumentView::OnPaint(wxPaintEvent&) {
                               finished - *trace.start)
                               .count());
             TraceEvent(trace.event.c_str(), microseconds);
+        }
+        if (hasPendingPaintTraces) {
+            // These are fixed-count events per first document paint. They do
+            // not emit once per block, so tracing overhead stays bounded as
+            // document size grows.
+            TraceEvent("layout_init",
+                       layoutInitMicroseconds.value_or(0));
+            TraceEvent("visible_layout", visibleLayoutMicroseconds);
+            TraceEvent("draw", drawMicroseconds);
         }
         impl_->pendingPaintTraces.clear();
     }

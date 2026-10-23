@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstddef>
 #include <cstdlib>
 #include <string>
@@ -446,6 +447,19 @@ int TextCallback(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* user
 }
 
 void NormalizeImages(MarkdownDocument& document) {
+    const bool hasAnyImage = std::any_of(
+        document.blocks.begin(), document.blocks.end(),
+        [](const Block& block) {
+            return block.kind == BlockKind::Text &&
+                   std::any_of(block.spans.begin(), block.spans.end(),
+                               [](const InlineSpan& span) {
+                                   return span.image;
+                               });
+        });
+    if (!hasAnyImage) {
+        return;
+    }
+
     std::vector<Block> normalized;
     normalized.reserve(document.blocks.size());
 
@@ -494,26 +508,23 @@ void NormalizeImages(MarkdownDocument& document) {
         flushText();
     }
 
-    BlockId nextId = 1;
-    for (auto& block : normalized) {
-        block.id = nextId++;
-    }
     document.blocks = std::move(normalized);
 }
 
-void NormalizeFlowcharts(MarkdownDocument& document) {
+void NormalizeBlocks(MarkdownDocument& document) {
+    BlockId nextId = 1;
     for (auto& block : document.blocks) {
-        if (block.kind != BlockKind::Code) {
-            continue;
-        }
-        std::string language = block.language;
-        std::transform(language.begin(), language.end(), language.begin(),
-                       [](unsigned char ch) {
-                           return static_cast<char>(std::tolower(ch));
-                       });
-        if (language == "mermaid") {
-            block.kind = BlockKind::Flowchart;
-            block.flowSource = block.raw;
+        block.id = nextId++;
+        if (block.kind == BlockKind::Code) {
+            std::string language = block.language;
+            std::transform(language.begin(), language.end(), language.begin(),
+                           [](unsigned char ch) {
+                               return static_cast<char>(std::tolower(ch));
+                           });
+            if (language == "mermaid") {
+                block.kind = BlockKind::Flowchart;
+                block.flowSource = block.raw;
+            }
         }
     }
 }
@@ -523,9 +534,11 @@ void NormalizeFlowcharts(MarkdownDocument& document) {
 namespace litemark {
 
 std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
-    const std::string& utf8,
+    std::string_view utf8,
     std::string* error,
-    const std::atomic_bool* cancelled) {
+    const std::atomic_bool* cancelled,
+    double* md4cMicroseconds,
+    double* normalizeMicroseconds) {
     auto document = std::make_shared<MarkdownDocument>();
     Parser parser(*document, cancelled);
 
@@ -538,8 +551,15 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
     mdParser.leave_span = LeaveSpanCallback;
     mdParser.text = TextCallback;
 
+    const auto parseStarted = std::chrono::steady_clock::now();
     const int result = md_parse(utf8.data(), static_cast<MD_SIZE>(utf8.size()),
                                 &mdParser, &parser);
+    if (md4cMicroseconds != nullptr) {
+        *md4cMicroseconds = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - parseStarted)
+                .count());
+    }
     if (result != 0) {
         if (error != nullptr) {
             *error = cancelled != nullptr && cancelled->load()
@@ -549,8 +569,15 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
         return nullptr;
     }
 
+    const auto normalizeStarted = std::chrono::steady_clock::now();
     NormalizeImages(*document);
-    NormalizeFlowcharts(*document);
+    NormalizeBlocks(*document);
+    if (normalizeMicroseconds != nullptr) {
+        *normalizeMicroseconds = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - normalizeStarted)
+                .count());
+    }
     return document;
 }
 

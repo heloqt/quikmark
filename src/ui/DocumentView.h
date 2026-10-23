@@ -37,6 +37,7 @@ public:
     void ForgetDocument(
         const std::shared_ptr<const MarkdownDocument>& document);
     int ScrollY() const;
+    int RequestedScrollY() const;
     void SelectAll();
     bool CopySelectionToClipboard();
     std::vector<HeadingAnchor> OutlineHeadings();

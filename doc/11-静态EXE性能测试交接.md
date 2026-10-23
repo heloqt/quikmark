@@ -126,6 +126,21 @@ results\<Name>\
 | `Large10MB.ScrollMs` | 10 MB 切换后的滚动 |
 | `Pass` | 普通文档硬门槛判定 |
 
+首屏阶段拆解字段：
+
+| 字段 | 含义 |
+|---|---|
+| `ColdStartBreakdown.ParseMs` | 150 KB 文件读取和 Markdown 解析 |
+| `ColdStartBreakdown.FileReadMs` | 完整文件读取 |
+| `ColdStartBreakdown.Utf8ConvertMs` | UTF-8 校验和必要整理 |
+| `ColdStartBreakdown.PrefixMd4cParseMs` | 首屏安全前缀的 md4c 解析 |
+| `ColdStartBreakdown.Md4cParseMs` | 完整文档的纯 md4c 解析 |
+| `ColdStartBreakdown.NormalizeMs` | 图片、flowchart 和块 ID 后处理 |
+| `ColdStartBreakdown.LayoutInitMs` | 150 KB 块槽位和高度预估初始化 |
+| `ColdStartBreakdown.VisibleLayoutMs` | 150 KB 当前视口附近真实布局 |
+| `ColdStartBreakdown.DrawMs` | 150 KB 当前视口块绘制 |
+| `Large10MB.ColdStartBreakdown` | 10 MB 对应的四项阶段数据 |
+
 每个统计对象包含：
 
 ```text
@@ -142,10 +157,10 @@ event,microseconds
 
 | 文件 | 事件 |
 |---|---|
-| `perf-cold.csv` | `cold_start`、`paint` |
-| `perf-hot-switch.csv` | `hot_open`、`tab_switch`、`paint` |
-| `perf-large-cold.csv` | 10 MB `cold_start`、`paint` |
-| `perf-large-interactive.csv` | 10 MB `hot_open`、`tab_switch`、`scroll`、`paint` |
+| `perf-cold.csv` | `cold_start`、解析拆解、布局拆解和 `paint` |
+| `perf-hot-switch.csv` | `hot_open`、`tab_switch`、解析拆解、布局拆解和 `paint` |
+| `perf-large-cold.csv` | 10 MB 对应冷启动和阶段事件 |
+| `perf-large-interactive.csv` | 10 MB `hot_open`、`tab_switch`、`scroll`、阶段事件、`paint` |
 | `perf-scroll.csv` | 独立 10 MB `scroll`、`paint` |
 
 换算：
@@ -161,6 +176,15 @@ event,microseconds
 - `tab_switch`：切换操作开始到目标 Tab 完成绘制。
 - `scroll`：滚轮事件进入处理到对应帧完成绘制。
 - `paint`：单次文档绘制耗时。
+- `parse`：文件读取、UTF-8 转换和 Markdown 解析耗时。
+- `file_read`：完整文件读取耗时。
+- `utf8_convert`：UTF-8 校验和字节整理耗时。
+- `prefix_md4c_parse`：首屏安全前缀的 md4c 解析耗时。
+- `md4c_parse`：完整文档的纯 md4c 解析耗时。
+- `normalize`：图片、flowchart 和块 ID 后处理耗时。
+- `layout_init`：块槽位和全文高度预估初始化耗时。
+- `visible_layout`：当前视口及上下各一屏的真实布局耗时。
+- `draw`：当前视口块绘制耗时。
 
 ## 6. 判定方法
 

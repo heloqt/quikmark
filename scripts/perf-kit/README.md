@@ -85,6 +85,10 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 - `perf-large-interactive.csv`：10 MB 热打开、切换和滚动。
 - `perf-scroll.csv`：10 MB 独立滚动。
 
+`performance-results.json` 的 `ColdStartBreakdown` 和
+`Large10MB.ColdStartBreakdown` 还包含文件读取、UTF-8 校验、前缀解析、
+完整 md4c、后处理、布局初始化和可见布局耗时。
+
 ## 日志阅读方式
 
 - CSV 每行格式为 `event,microseconds`。
@@ -93,6 +97,15 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 - `tab_switch`：切换操作开始到目标 Tab 完成绘制。
 - `scroll`：滚轮事件进入处理到对应帧完成绘制。
 - `paint`：一次文档绘制的耗时。
+- `parse`：文件读取、UTF-8 转换和 Markdown 解析耗时。
+- `file_read`：完整文件读取耗时。
+- `utf8_convert`：UTF-8 校验和字节整理耗时。
+- `prefix_md4c_parse`：首屏安全前缀的 md4c 解析耗时。
+- `md4c_parse`：完整文档的纯 md4c 解析耗时。
+- `normalize`：图片、flowchart 和块 ID 后处理耗时。
+- `layout_init`：块槽位和全文高度预估初始化耗时。
+- `visible_layout`：当前视口及上下各一屏的真实布局耗时。
+- `draw`：当前视口块绘制耗时。
 
 JSON 中的 `Pass` 只判定普通文档冷启动、热打开、Tab 切换和滚动门槛。10 MB 冷启动是挑战目标，不参与失败判定；10 MB 切换目前应单独查看 `Large10MB.TabSwitchMs`。
 
