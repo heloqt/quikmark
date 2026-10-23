@@ -62,6 +62,7 @@ add_executable(litemark WIN32
     src/session/TabManager.cpp
     src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
+    src/ui/DocumentMediaRenderer.cpp
     src/ui/MainFrame.cpp
     src/ui/OutlineList.cpp
     src/ui/OutlineToggleButton.cpp
