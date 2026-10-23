@@ -28,7 +28,8 @@ foreach ($name in @(
     "benchmark.ps1",
     "block-stress-benchmark.ps1",
     "compare-power-modes.ps1",
-    "continuous-scroll-benchmark.ps1"
+    "continuous-scroll-benchmark.ps1",
+    "media-regression.ps1"
 )) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) `
         -Destination $toolDirectory
@@ -36,14 +37,26 @@ foreach ($name in @(
 foreach ($name in @(
     "README.md",
     "run-benchmark.ps1",
+    "run-block-stress.ps1",
     "run-power-modes.ps1",
-    "run-continuous-scroll.ps1"
+    "run-continuous-scroll.ps1",
+    "run-media-regression.ps1"
 )) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "perf-kit\$name") `
         -Destination $OutputDirectory
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot "doc\11-静态EXE性能测试交接.md") `
     -Destination (Join-Path $OutputDirectory "HANDOFF.md")
+$docsDirectory = Join-Path $OutputDirectory "docs"
+New-Item -ItemType Directory -Path $docsDirectory -Force | Out-Null
+foreach ($name in @(
+    "14-启动阶段打点与复测.md",
+    "15-超大单块虚拟化.md",
+    "16-DocumentView拆分记录.md"
+)) {
+    Copy-Item -LiteralPath (Join-Path $projectRoot "doc\$name") `
+        -Destination $docsDirectory
+}
 
 $hash = Get-FileHash -LiteralPath (Join-Path $OutputDirectory "liteMark.exe") `
     -Algorithm SHA256
@@ -71,6 +84,9 @@ if ($Zip) {
     if (-not $compressed) {
         throw "Failed to create performance kit archive."
     }
+    $zipHash = Get-FileHash -LiteralPath $zipPath -Algorithm SHA256
+    "$($zipHash.Hash)  $([IO.Path]::GetFileName($zipPath))" |
+        Set-Content -LiteralPath "$zipPath.sha256" -Encoding ASCII
     Write-Host "Performance kit: $zipPath"
 } else {
     Write-Host "Performance kit: $OutputDirectory"

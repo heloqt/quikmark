@@ -8,7 +8,7 @@ if (Get-Process litemark -ErrorAction SilentlyContinue) {
     throw "Close all running liteMark instances before media regression."
 }
 
-$projectRoot = (Get-Location).Path
+$projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not [IO.Path]::IsPathRooted($Exe)) {
     $Exe = Join-Path $projectRoot $Exe
 }
@@ -121,11 +121,23 @@ try {
         throw "Mermaid flowchart did not enter the media cache."
     }
 
-    [pscustomobject]@{
+    $result = [pscustomobject]@{
+        Environment = [pscustomobject]@{
+            Cpu = (Get-CimInstance Win32_Processor |
+                Select-Object -First 1).Name.Trim()
+            OperatingSystem = (Get-CimInstance Win32_OperatingSystem).Caption
+            ExeSha256 = (Get-FileHash -LiteralPath $Exe `
+                -Algorithm SHA256).Hash
+        }
         LocalImages = $images
         Flowcharts = $flowcharts
         Result = "PASS"
-    } | Format-List
+    }
+    $resultPath = Join-Path $fixtureDir "results.json"
+    $result | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath $resultPath -Encoding UTF8
+    $result | Format-List
+    Write-Host "Results: $resultPath"
 } finally {
     if ($process -and -not $process.HasExited) {
         Stop-Process -Id $process.Id -Force

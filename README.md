@@ -11,12 +11,12 @@ liteMark 是一个原生、轻量、只读的 Markdown 阅读器，不依赖 Chr
 - [Gitee Releases 下载页](https://gitee.com/heloqt/litemark/releases)
 - [直接下载 liteMark 1.0.0 安装包](https://gitee.com/heloqt/litemark/releases/download/v1.0.0/liteMark-1.0.0-setup.exe)
 
-安装包约 4.04 MiB，主发布制品满足 `<10 MiB` 目标。安装器可选创建桌面快捷方式和关联 `.md`/`.markdown` 文件；开始菜单快捷方式始终创建，完成后运行程序默认不勾选。
+安装包约 4.06 MiB，主发布制品满足 `<10 MiB` 目标。安装器可选创建桌面快捷方式和关联 `.md`/`.markdown` 文件；开始菜单快捷方式始终创建，完成后运行程序默认不勾选。
 
 SHA256：
 
 ```text
-3F3268AD97A421E30FBAC91E56D83185FF88DE984C3C0337AE4205E11E8EE58F
+F296183CF1C51792BE4A0E5F4D2FDBCEC17F47ECA9E877A36DE07C9AB7BE7450
 ```
 
 > 直接下载地址要求 Gitee 上已经建立 `v1.0.0` Release 并上传对应安装包。
@@ -111,6 +111,15 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 版本从 `CMakeLists.txt` 的 `project(... VERSION ...)` 自动读取，安装器输出到 `dist\`。打包脚本会拒绝超过 10 MB 的主发布制品。
+
+生成无需开发环境的性能测试包：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\create-perf-kit.ps1 `
+  -OutputDirectory .\dist\liteMark-perf-kit-20261023 `
+  -Zip
+```
 
 ## 文档
 

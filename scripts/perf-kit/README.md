@@ -53,7 +53,14 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass `
-     -File .\scripts\block-stress-benchmark.ps1 -Samples 5
+     -File .\run-block-stress.ps1 -Samples 5
+   ```
+
+7. 图片与 flowchart 媒体回归：
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass `
+     -File .\run-media-regression.ps1
    ```
 
 ## 电源模式对比
@@ -91,6 +98,8 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 - `perf-large-cold.csv`：10 MB 冷启动。
 - `perf-large-interactive.csv`：10 MB 热打开、切换和滚动。
 - `perf-scroll.csv`：10 MB 独立滚动。
+- `block-stress-*\results.json`：5000 行表格和 9.5 MB 单段落压力结果。
+- `media-*\results.json`：本地图片和 Mermaid flowchart 异步加载结果。
 
 `performance-results.json` 的 `ColdStartBreakdown` 和
 `Large10MB.ColdStartBreakdown` 还包含文件读取、UTF-8 校验、前缀解析、
@@ -122,3 +131,4 @@ JSON 中的 `Pass` 只判定普通文档冷启动、热打开、Tab 切换和滚
 - 不要只回传截图；JSON 和 CSV 才能复核分位数与长尾。
 - 若切换了电源模式，请确保测试机仍是交流供电，并在结果目录中记录模式名称。
 - 静态 EXE 仍依赖 Windows 自带的 UCRT、WinHTTP、GDI/GDI+ 等系统组件，不需要另外安装 MinGW DLL。
+- `docs` 目录包含性能打点、超大单块虚拟化和代码拆分记录。
