@@ -7,7 +7,10 @@
 #include "core/policy/ResourcePolicy.h"
 #include "platform/windows/ImageDownloader.h"
 #include "platform/windows/PerformanceTrace.h"
+#include "ui/BlockLayout.h"
 #include "ui/PendingScroll.h"
+#include "ui/TableLayout.h"
+#include "ui/TextLayout.h"
 
 #include <wx/app.h>
 #include <wx/bitmap.h>
@@ -46,6 +49,27 @@
 #include <utility>
 #include <vector>
 
+using litemark::detail::BaseStyle;
+using litemark::detail::BlockLayout;
+using litemark::detail::BlockSlot;
+using litemark::detail::BuildFont;
+using litemark::detail::BuildTableLayout;
+using litemark::detail::BuildTextLayout;
+using litemark::detail::CellLayout;
+using litemark::detail::FontMap;
+using litemark::detail::IntrinsicAfter;
+using litemark::detail::IntrinsicBefore;
+using litemark::detail::LayoutCacheEntry;
+using litemark::detail::Line;
+using litemark::detail::LineHeight;
+using litemark::detail::RowLayout;
+using litemark::detail::ScaledPointSize;
+using litemark::detail::Segment;
+using litemark::detail::TextLayout;
+using litemark::detail::TextStyle;
+using litemark::detail::Utf8CodeUnitAdvance;
+using litemark::detail::ViewLayout;
+
 namespace {
 
 constexpr double kMouseWheelPageFraction = 0.45;
@@ -81,109 +105,6 @@ std::size_t CountUtf8Characters(const std::string& text) {
     return count;
 }
 
-struct TextStyle {
-    int pointSize = 11;
-    bool bold = false;
-    bool italic = false;
-    bool mono = false;
-    bool underline = false;
-    bool strikethrough = false;
-    bool code = false;
-    bool image = false;
-    bool link = false;
-
-    auto key() const {
-        return std::tie(pointSize, bold, italic, mono, underline);
-    }
-};
-
-struct Segment {
-    wxString text;
-    TextStyle style;
-    wxString href;
-    int x = 0;
-    int width = 0;
-    std::size_t sourceStart = 0;
-    std::size_t sourceEnd = 0;
-};
-
-struct Line {
-    std::vector<Segment> segments;
-    int y = 0;
-    int height = 0;
-    int width = 0;
-};
-
-struct TextLayout {
-    std::vector<Line> lines;
-    int height = 0;
-};
-
-struct CellLayout {
-    TextLayout text;
-    int x = 0;
-    int width = 0;
-};
-
-struct RowLayout {
-    std::vector<CellLayout> cells;
-    int y = 0;
-    int height = 0;
-};
-
-struct BlockLayout {
-    const litemark::Block* block = nullptr;
-    std::size_t blockIndex = 0;
-    int x = 0;
-    int y = 0;
-    int width = 0;
-    int height = 0;
-    TextLayout text;
-    std::vector<RowLayout> tableRows;
-    int tableContentWidth = 0;
-    int tableRowsHeight = 0;
-    int tableScrollX = 0;
-    int tableScrollbarHeight = 0;
-    wxBitmap imageBitmap;
-    wxString placeholderText;
-    bool flowchartFallback = false;
-    struct FlowchartLayout;
-    std::unique_ptr<FlowchartLayout> flowchart;
-    wxString marker;
-    int markerX = 0;
-    int markerGutter = 0;
-    int markerY = 0;
-};
-
-struct BlockLayout::FlowchartLayout {
-    struct Node {
-        const litemark::FlowNode* source = nullptr;
-        wxRect rect;
-        TextLayout label;
-    };
-
-    struct Edge {
-        const litemark::FlowEdge* source = nullptr;
-        wxPoint from;
-        wxPoint to;
-        bool arrow = true;
-        TextLayout label;
-        wxRect labelRect;
-    };
-
-    struct Cluster {
-        const litemark::FlowCluster* source = nullptr;
-        wxRect rect;
-        wxString title;
-    };
-
-    std::vector<Node> nodes;
-    std::vector<Edge> edges;
-    std::vector<Cluster> clusters;
-    int width = 0;
-    int height = 0;
-};
-
 struct ImageLoadedPayload {
     wxString key;
     std::shared_ptr<wxImage> image;
@@ -193,348 +114,6 @@ struct FlowchartLoadedPayload {
     std::string source;
     litemark::FlowchartParseResult result;
 };
-
-struct BlockSlot {
-    int estimatedHeight = 0;
-    int actualHeight = -1;
-};
-
-struct ViewLayout {
-    std::vector<BlockSlot> slots;
-    std::map<std::size_t, BlockLayout> blockLayouts;
-    int estimatedTotalHeight = 0;
-    int width = 0;
-};
-
-struct LayoutCacheEntry {
-    std::shared_ptr<const litemark::MarkdownDocument> document;
-    std::shared_ptr<ViewLayout> layout;
-};
-
-int LineHeight(wxDC& dc) {
-    return std::max(14, dc.GetCharHeight() + 2);
-}
-
-wxString ChooseFace(bool mono) {
-    if (mono) {
-        if (wxFontEnumerator::IsValidFacename("Cascadia Mono")) {
-            return "Cascadia Mono";
-        }
-        return "Consolas";
-    }
-    if (wxFontEnumerator::IsValidFacename("Microsoft YaHei UI")) {
-        return "Microsoft YaHei UI";
-    }
-    return "Segoe UI";
-}
-
-wxFont BuildFont(const TextStyle& style) {
-    wxFont font(wxFontInfo(style.pointSize).FaceName(ChooseFace(style.mono)));
-    if (style.bold) {
-        font.SetWeight(wxFONTWEIGHT_BOLD);
-    }
-    if (style.italic) {
-        font.SetStyle(wxFONTSTYLE_ITALIC);
-    }
-    if (style.underline) {
-        font.SetUnderlined(true);
-    }
-    return font;
-}
-
-int ScaledPointSize(int pointSize, double fontScale) {
-    return std::clamp(
-        static_cast<int>(std::lround(pointSize * fontScale)), 6, 72);
-}
-
-TextStyle BaseStyle(const litemark::Block& block) {
-    TextStyle style;
-    switch (block.kind) {
-        case litemark::BlockKind::Heading:
-            style.bold = true;
-            style.pointSize = std::max(12, 25 - block.headingLevel * 2);
-            break;
-        case litemark::BlockKind::Code:
-        case litemark::BlockKind::Html:
-            style.pointSize = 10;
-            style.mono = true;
-            style.code = true;
-            break;
-        default:
-            style.pointSize = 11;
-            break;
-    }
-    return style;
-}
-
-int BreakPosition(const wxString& text, int fit) {
-    if (fit <= 0) {
-        return 0;
-    }
-    if (fit >= static_cast<int>(text.length())) {
-        return static_cast<int>(text.length());
-    }
-
-    const int lowerBound = std::max(1, fit / 3);
-    for (int i = fit - 1; i >= lowerBound; --i) {
-        if (text[i] == ' ' || text[i] == '\t') {
-            return i;
-        }
-    }
-    return fit;
-}
-
-using FontMap =
-    std::map<std::tuple<int, bool, bool, bool, bool>, wxFont>;
-
-std::size_t Utf8CodeUnitAdvance(const wxString& text, int index) {
-    const unsigned long value = text[index].GetValue();
-    if (value <= 0x7FUL) {
-        return 1;
-    }
-    if (value <= 0x7FFUL) {
-        return 2;
-    }
-    if (value >= 0xD800UL && value <= 0xDBFFUL) {
-        return 4;
-    }
-    if (value >= 0xDC00UL && value <= 0xDFFFUL) {
-        return 0;
-    }
-    return 3;
-}
-
-std::size_t Utf8ByteLength(const wxString& text) {
-    std::size_t length = 0;
-    for (int index = 0; index < static_cast<int>(text.length()); ++index) {
-        length += Utf8CodeUnitAdvance(text, index);
-    }
-    return length;
-}
-
-void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
-                     const std::vector<litemark::InlineSpan>& spans,
-                     const TextStyle& baseStyle, double fontScale,
-                     FontMap* fonts) {
-    maxWidth = std::max(20, maxWidth);
-    auto fontFor = [&](const TextStyle& style) -> wxFont {
-        TextStyle scaled = style;
-        scaled.pointSize = ScaledPointSize(style.pointSize, fontScale);
-        if (fonts == nullptr) {
-            return BuildFont(scaled);
-        }
-        auto result = fonts->try_emplace(scaled.key(), BuildFont(scaled));
-        return result.first->second;
-    };
-
-    auto ensureLine = [&]() -> Line& {
-        if (layout.lines.empty()) {
-            layout.lines.emplace_back();
-        }
-        return layout.lines.back();
-    };
-
-    auto newLine = [&]() {
-        if (layout.lines.empty()) {
-            layout.lines.emplace_back();
-            return;
-        }
-        Line& previous = layout.lines.back();
-        if (previous.segments.empty() && previous.width == 0) {
-            return;
-        }
-        Line line;
-        line.y = previous.y + previous.height + 3;
-        layout.lines.push_back(std::move(line));
-    };
-
-    auto refreshHeight = [&]() {
-        if (!layout.lines.empty()) {
-            const Line& last = layout.lines.back();
-            layout.height = last.y + last.height;
-        }
-    };
-
-    auto appendSegment = [&](const wxString& text, const TextStyle& style,
-                             const wxString& href, int width,
-                             std::size_t sourceStart,
-                             std::size_t sourceBytes) {
-        Line& line = ensureLine();
-        dc.SetFont(fontFor(style));
-        const int oldHeight = line.height;
-        line.height = std::max(line.height, LineHeight(dc));
-        if (!line.segments.empty()) {
-            Segment& last = line.segments.back();
-            const bool sameStyle =
-                last.style.key() == style.key() &&
-                last.style.code == style.code &&
-                last.style.image == style.image &&
-                last.style.link == style.link &&
-                last.style.strikethrough == style.strikethrough &&
-                last.href == href;
-            if (sameStyle) {
-                last.text += text;
-                last.sourceEnd = sourceStart + sourceBytes;
-                last.width += width;
-                line.width += width;
-            } else {
-                Segment segment;
-                segment.text = text;
-                segment.style = style;
-                segment.href = href;
-                segment.x = line.width;
-                segment.width = width;
-                segment.sourceStart = sourceStart;
-                segment.sourceEnd = sourceStart + sourceBytes;
-                line.segments.push_back(std::move(segment));
-                line.width += width;
-            }
-        } else {
-            Segment segment;
-            segment.text = text;
-            segment.style = style;
-            segment.href = href;
-            segment.x = 0;
-            segment.width = width;
-            segment.sourceStart = sourceStart;
-            segment.sourceEnd = sourceStart + sourceBytes;
-            line.segments.push_back(std::move(segment));
-            line.width = width;
-        }
-        if (line.height < oldHeight) {
-            line.height = oldHeight;
-        }
-        refreshHeight();
-    };
-
-    std::size_t sourceCursor = 0;
-    for (const auto& sourceSpan : spans) {
-        std::size_t spanCursor = sourceCursor;
-        sourceCursor += sourceSpan.text.size();
-        wxString text = wxString::FromUTF8(sourceSpan.text);
-        if (sourceSpan.image) {
-            text = text.empty() ? U8("[图片]")
-                                : U8("[图片: ") + text + U8("]");
-        }
-        if (text.empty()) {
-            continue;
-        }
-
-        TextStyle style = baseStyle;
-        style.bold = style.bold || sourceSpan.bold;
-        style.italic = style.italic || sourceSpan.italic;
-        style.strikethrough =
-            style.strikethrough || sourceSpan.strikethrough;
-        style.code = style.code || sourceSpan.code;
-        style.mono = style.mono || sourceSpan.code;
-        style.image = sourceSpan.image;
-        style.link = !sourceSpan.image && !sourceSpan.href.empty();
-        style.underline = style.underline || style.link;
-        const wxString href = wxString::FromUTF8(sourceSpan.href);
-
-        while (!text.empty()) {
-            const int newline = text.Find('\n');
-            wxString part = newline == wxNOT_FOUND ? text : text.Left(newline);
-            const bool hardBreak = newline != wxNOT_FOUND;
-            text = newline == wxNOT_FOUND ? wxString() : text.Mid(newline + 1);
-
-            while (!part.empty()) {
-                if (ensureLine().segments.empty() &&
-                    (part.StartsWith(" ") || part.StartsWith("\t"))) {
-                    part = part.Mid(1);
-                    ++spanCursor;
-                    continue;
-                }
-
-                dc.SetFont(fontFor(style));
-                Line& current = ensureLine();
-                current.height = std::max(current.height, LineHeight(dc));
-                refreshHeight();
-
-                const int available = maxWidth - current.width;
-                if (available <= 0) {
-                    newLine();
-                    continue;
-                }
-
-                wxArrayInt partial;
-                dc.GetPartialTextExtents(part, partial);
-                int fit = 0;
-                for (std::size_t i = 0; i < partial.size(); ++i) {
-                    if (partial[i] <= available) {
-                        fit = static_cast<int>(i) + 1;
-                    } else {
-                        break;
-                    }
-                }
-                if (fit == 0) {
-                    if (!current.segments.empty()) {
-                        newLine();
-                        continue;
-                    }
-                    fit = 1;
-                }
-
-                fit = BreakPosition(part, fit);
-                if (fit <= 0) {
-                    fit = 1;
-                }
-
-                wxString piece = part.Left(fit);
-                const int pieceWidth = dc.GetTextExtent(piece).x;
-                const std::size_t pieceBytes = Utf8ByteLength(piece);
-                appendSegment(piece, style, href, pieceWidth, spanCursor,
-                              pieceBytes);
-                spanCursor += pieceBytes;
-                part = part.Mid(fit);
-                if (!part.empty()) {
-                    newLine();
-                }
-            }
-
-            if (hardBreak) {
-                newLine();
-                ++spanCursor;
-            }
-        }
-    }
-
-    if (layout.lines.empty()) {
-        layout.lines.emplace_back();
-        dc.SetFont(fontFor(baseStyle));
-        layout.lines.back().height = LineHeight(dc);
-    }
-    refreshHeight();
-}
-
-int IntrinsicBefore(const litemark::Block& block) {
-    if (block.continuesPreviousBlock) {
-        return 0;
-    }
-    if (block.kind == litemark::BlockKind::Heading) {
-        return block.headingLevel <= 2 ? 16 : 12;
-    }
-    if (block.kind == litemark::BlockKind::Code ||
-        block.kind == litemark::BlockKind::Table ||
-        block.kind == litemark::BlockKind::Rule) {
-        return 14;
-    }
-    return 8;
-}
-
-int IntrinsicAfter(const litemark::Block& block) {
-    if (block.continuesNextBlock) {
-        return 0;
-    }
-    if (block.kind == litemark::BlockKind::Heading) {
-        return 10;
-    }
-    if (block.kind == litemark::BlockKind::Code ||
-        block.kind == litemark::BlockKind::Table) {
-        return 14;
-    }
-    return 7;
-}
 
 enum class ExternalLinkResult {
     Opened,
@@ -1462,7 +1041,8 @@ struct DocumentView::Impl {
         } else if (block.kind == BlockKind::Flowchart) {
             BuildFlowchartLayout(dc, item, width, scale);
         } else if (block.kind == BlockKind::Table) {
-            BuildTableLayout(dc, item, width, scale);
+            BuildTableLayout(
+                dc, block, item, width, scale, fontScale, &fonts);
         } else if (block.kind == BlockKind::Code ||
                    block.kind == BlockKind::Html) {
             TextStyle style = BaseStyle(block);
@@ -1739,160 +1319,6 @@ struct DocumentView::Impl {
             return wxString::Format("%d.", block.listIndex);
         }
         return U8("•");
-    }
-
-    int MeasureCellWidth(wxDC& dc,
-                         const std::vector<litemark::InlineSpan>& spans,
-                         bool header) {
-        int widest = 0;
-        for (const auto& sourceSpan : spans) {
-            TextStyle style;
-            style.pointSize = 10;
-            style.bold = header || sourceSpan.bold;
-            style.italic = sourceSpan.italic;
-            style.mono = sourceSpan.code;
-            wxString text = wxString::FromUTF8(sourceSpan.text);
-            if (sourceSpan.image) {
-                text = text.empty() ? U8("[图片]")
-                                    : U8("[图片: ") + text + U8("]");
-            }
-            dc.SetFont(FontFor(style));
-            const wxArrayString lines = wxSplit(text, '\n', '\0');
-            for (const auto& line : lines) {
-                widest = std::max(widest, dc.GetTextExtent(line).x);
-            }
-        }
-        return widest;
-    }
-
-    void BuildTableLayout(wxDC& dc, BlockLayout& item, int width,
-                          double scale) {
-        const Block& block = *item.block;
-        const std::size_t rowCount = block.tableRows.size();
-        std::size_t columnCount = 0;
-        for (const auto& row : block.tableRows) {
-            columnCount = std::max(columnCount, row.size());
-        }
-        if (rowCount == 0 || columnCount == 0) {
-            item.height = 20;
-            return;
-        }
-
-        const int cellPadding =
-            static_cast<int>(std::lround(9 * scale));
-        const int minColumnWidth =
-            static_cast<int>(std::lround(64 * scale));
-        const int maxMinColumnWidth =
-            static_cast<int>(std::lround(150 * scale));
-        const int desiredColumnWidth =
-            static_cast<int>(std::lround(380 * scale));
-
-        std::vector<int> minimums(columnCount, minColumnWidth);
-        std::vector<int> desired(columnCount, minColumnWidth);
-        for (std::size_t c = 0; c < columnCount; ++c) {
-            int contentWidth = 0;
-            const std::size_t measuredRows =
-                block.tableColumnWidthHints.empty()
-                    ? rowCount
-                    : std::min<std::size_t>(rowCount, 32);
-            for (std::size_t r = 0; r < measuredRows; ++r) {
-                if (c < block.tableRows[r].size()) {
-                    contentWidth = std::max(
-                        contentWidth,
-                        MeasureCellWidth(dc, block.tableRows[r][c].spans,
-                                         r == 0));
-                }
-            }
-            if (c < block.tableColumnWidthHints.size()) {
-                contentWidth = std::max(
-                    contentWidth,
-                    static_cast<int>(std::lround(
-                        block.tableColumnWidthHints[c] * 9 * scale *
-                        fontScale)));
-            }
-            desired[c] = std::clamp(contentWidth + cellPadding * 2,
-                                    minColumnWidth, desiredColumnWidth);
-            minimums[c] = std::clamp(desired[c], minColumnWidth,
-                                     maxMinColumnWidth);
-        }
-
-        const int totalMinimum =
-            std::accumulate(minimums.begin(), minimums.end(), 0);
-        const int totalDesired =
-            std::accumulate(desired.begin(), desired.end(), 0);
-        std::vector<int> columnWidths(columnCount, minColumnWidth);
-
-        if (totalDesired <= width) {
-            columnWidths = desired;
-        } else if (totalMinimum <= width) {
-            int flexible = 0;
-            for (std::size_t c = 0; c < columnCount; ++c) {
-                flexible += desired[c] - minimums[c];
-            }
-            const int extra = width - totalMinimum;
-            int assigned = 0;
-            for (std::size_t c = 0; c < columnCount; ++c) {
-                const int weight = desired[c] - minimums[c];
-                const int share =
-                    flexible > 0 ? extra * weight / flexible : 0;
-                columnWidths[c] = minimums[c] + share;
-                assigned += columnWidths[c];
-            }
-            if (!columnWidths.empty() && assigned < width) {
-                columnWidths.back() += width - assigned;
-            }
-        } else {
-            columnWidths = minimums;
-        }
-
-        item.tableContentWidth =
-            std::accumulate(columnWidths.begin(), columnWidths.end(), 0);
-        item.tableScrollX =
-            std::clamp(item.tableScrollX, 0,
-                       std::max(0, item.tableContentWidth - width));
-        item.tableScrollbarHeight =
-            item.tableContentWidth > width
-                ? static_cast<int>(std::lround(9 * scale))
-                : 0;
-
-        int y = 0;
-        std::vector<int> columnX(columnCount, 0);
-        for (std::size_t c = 1; c < columnCount; ++c) {
-            columnX[c] = columnX[c - 1] + columnWidths[c - 1];
-        }
-
-        for (std::size_t r = 0; r < rowCount; ++r) {
-            RowLayout rowLayout;
-            rowLayout.y = y;
-            for (std::size_t c = 0; c < columnCount; ++c) {
-                CellLayout cell;
-                cell.x = columnX[c];
-                cell.width = columnWidths[c];
-                TextStyle style;
-                style.pointSize = 10;
-                style.bold = block.tableFirstRowIsHeader && r == 0;
-                if (c < block.tableRows[r].size()) {
-                    BuildTextLayout(dc, cell.text,
-                                    columnWidths[c] - cellPadding * 2,
-                                    block.tableRows[r][c].spans, style,
-                                    fontScale, &fonts);
-                } else {
-                    cell.text.height = 0;
-                }
-                rowLayout.cells.push_back(std::move(cell));
-            }
-
-            int rowHeight = static_cast<int>(std::lround(20 * scale));
-            for (const auto& cell : rowLayout.cells) {
-                rowHeight =
-                    std::max(rowHeight, cell.text.height + cellPadding * 2);
-            }
-            rowLayout.height = rowHeight;
-            y += rowHeight;
-            item.tableRows.push_back(std::move(rowLayout));
-        }
-        item.tableRowsHeight = y;
-        item.height = y + item.tableScrollbarHeight;
     }
 
     void DrawPlaceholder(wxDC& dc, int scrollX, int scrollY, int clientWidth) {
