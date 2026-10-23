@@ -35,6 +35,23 @@ std::size_t ReadCount(const std::map<std::string, std::string>& values,
     return value <= 0 ? 0 : std::min(maximum, static_cast<std::size_t>(value));
 }
 
+litemark::OutlineState ReadOutlineState(
+    const std::map<std::string, std::string>& values) {
+    const std::string value = ReadValue(values, "outline.state");
+    if (value == "expanded") {
+        return litemark::OutlineState::Expanded;
+    }
+    if (value == "collapsed") {
+        return litemark::OutlineState::Collapsed;
+    }
+    if (value == "hidden") {
+        return litemark::OutlineState::Hidden;
+    }
+    return ReadInt(values, "outline.visible", 0) != 0
+               ? litemark::OutlineState::Expanded
+               : litemark::OutlineState::Hidden;
+}
+
 void SetError(std::string* error, const std::string& value) {
     if (error != nullptr) {
         *error = value;
@@ -77,7 +94,7 @@ WorkspaceState WorkspaceStore::Load() const {
     state.windowWidth = std::max(0, ReadInt(values, "window.width", 0));
     state.windowHeight = std::max(0, ReadInt(values, "window.height", 0));
     state.maximized = ReadInt(values, "window.maximized", 0) != 0;
-    state.outlineVisible = ReadInt(values, "outline.visible", 0) != 0;
+    state.outlineState = ReadOutlineState(values);
 
     const std::size_t tabCount =
         ReadCount(values, "tabs.count", kMaximumSavedTabs);
@@ -135,7 +152,15 @@ bool WorkspaceStore::Save(const WorkspaceState& state,
     output << "window.width=" << state.windowWidth << '\n';
     output << "window.height=" << state.windowHeight << '\n';
     output << "window.maximized=" << (state.maximized ? 1 : 0) << '\n';
-    output << "outline.visible=" << (state.outlineVisible ? 1 : 0) << '\n';
+    const char* outlineState =
+        state.outlineState == OutlineState::Expanded
+            ? "expanded"
+            : state.outlineState == OutlineState::Collapsed
+                  ? "collapsed"
+                  : "hidden";
+    output << "outline.state=" << outlineState << '\n';
+    output << "outline.visible="
+           << (state.outlineState == OutlineState::Hidden ? 0 : 1) << '\n';
     output << "tabs.selected=" << state.selectedTab << '\n';
 
     const std::size_t tabCount =

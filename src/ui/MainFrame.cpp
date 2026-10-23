@@ -7,6 +7,7 @@
 #include "platform/windows/FileAssociation.h"
 #include "ui/DocumentView.h"
 #include "ui/OutlineList.h"
+#include "ui/OutlineToggleButton.h"
 #include "ui/TabStrip.h"
 
 #include <wx/aboutdlg.h>
@@ -147,7 +148,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     RestoreWindowPlacement();
     RestoreWorkspace();
     UpdateRecentMenu();
-    SetOutlineVisible(workspace_.outlineVisible);
+    SetOutlineState(workspace_.outlineState);
     TraceEvent("startup_restored",
                static_cast<double>(ProcessAgeMicroseconds()));
 }
@@ -228,8 +229,7 @@ void MainFrame::SaveWorkspace() {
     state.windowWidth = bounds.width;
     state.windowHeight = bounds.height;
     state.maximized = IsMaximized();
-    state.outlineVisible =
-        outlinePanel_ != nullptr && outlinePanel_->IsShown();
+    state.outlineState = outlineState_;
     state.selectedTab = static_cast<std::size_t>(
         std::max(0, tabs_.selectedIndex()));
     state.tabs.clear();
@@ -305,19 +305,19 @@ void MainFrame::RememberRecentFile(const wxString& path) {
 }
 
 void MainFrame::LayoutOutlinePanel() {
-    if (outlinePanel_ == nullptr || contentSizer_ == nullptr ||
-        !outlinePanel_->IsShown()) {
+    if (outlinePanel_ == nullptr || contentSizer_ == nullptr) {
         return;
     }
-    const wxSize client = GetClientSize();
-    const int width = std::max(FromDIP(180), client.x * 24 / 100);
+    const int width =
+        outlineState_ == OutlineState::Expanded ? FromDIP(260)
+                                                 : FromDIP(24);
     outlinePanel_->SetMinSize(wxSize(width, -1));
     Layout();
 }
 
 void MainFrame::UpdateOutline() {
     if (outlinePanel_ == nullptr || outlineList_ == nullptr ||
-        !outlinePanel_->IsShown()) {
+        outlineState_ != OutlineState::Expanded) {
         return;
     }
     updatingOutline_ = true;
@@ -331,24 +331,49 @@ void MainFrame::UpdateOutline() {
 }
 
 void MainFrame::OnOutline(wxCommandEvent&) {
-    SetOutlineVisible(outlinePanel_ == nullptr || !outlinePanel_->IsShown());
+    SetOutlineState(outlineState_ == OutlineState::Hidden
+                        ? OutlineState::Expanded
+                        : OutlineState::Hidden);
 }
 
-void MainFrame::SetOutlineVisible(bool visible) {
+void MainFrame::OnOutlineToggle(wxCommandEvent&) {
+    SetOutlineState(outlineState_ == OutlineState::Expanded
+                        ? OutlineState::Collapsed
+                        : OutlineState::Expanded);
+}
+
+void MainFrame::SetOutlineState(OutlineState state) {
     if (outlinePanel_ == nullptr || contentSizer_ == nullptr) {
         return;
     }
-    contentSizer_->Show(outlinePanel_, visible, true);
-    outlinePanel_->Show(visible);
+    outlineState_ = state;
+    const bool active = state != OutlineState::Hidden;
+    const bool expanded = state == OutlineState::Expanded;
+    contentSizer_->Show(outlinePanel_, active, true);
+    outlinePanel_->Show(active);
+    if (outlineContentPanel_ != nullptr) {
+        outlineContentPanel_->Show(expanded);
+    }
+    if (outlineToggleButton_ != nullptr) {
+        outlineToggleButton_->SetExpanded(expanded);
+    }
+    if (outlineList_ != nullptr) {
+        outlineList_->Show(expanded);
+    }
+    if (outlineEmptyText_ != nullptr) {
+        outlineEmptyText_->Show(
+            expanded && outlineList_ != nullptr &&
+            outlineList_->GetItemCount() == 0);
+    }
     if (auto* item = GetMenuBar()->FindItem(ID_OUTLINE)) {
-        item->Check(visible);
+        item->Check(active);
     }
-    if (visible) {
-        LayoutOutlinePanel();
+    LayoutOutlinePanel();
+    if (expanded) {
         UpdateOutline();
-    } else {
-        Layout();
     }
+    outlinePanel_->Layout();
+    Layout();
 }
 
 void MainFrame::OnOutlineItem(wxCommandEvent&) {
@@ -687,25 +712,42 @@ void MainFrame::OnSearchCompleted(wxThreadEvent& event) {
 void MainFrame::CreateOutlinePanel() {
     outlinePanel_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
                                 wxDefaultSize, wxBORDER_SIMPLE);
+    outlineContentPanel_ = new wxPanel(
+        outlinePanel_, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+        wxBORDER_NONE);
 
-    auto* title = new wxStaticText(outlinePanel_, wxID_ANY, U8("目录"));
+    outlineTitle_ =
+        new wxStaticText(outlineContentPanel_, wxID_ANY, U8("目录"));
     wxFont titleFont(wxFontInfo(11).FaceName("Microsoft YaHei UI"));
     titleFont.SetWeight(wxFONTWEIGHT_BOLD);
-    title->SetFont(titleFont);
+    outlineTitle_->SetFont(titleFont);
 
-    outlineList_ = new OutlineList(outlinePanel_, ID_OUTLINE_LIST);
+    outlineToggleButton_ =
+        new OutlineToggleButton(outlinePanel_, ID_OUTLINE_TOGGLE);
+
+    outlineList_ = new OutlineList(outlineContentPanel_, ID_OUTLINE_LIST);
     outlineEmptyText_ = new wxStaticText(
-        outlinePanel_, wxID_ANY, U8("当前文档没有标题"),
+        outlineContentPanel_, wxID_ANY, U8("当前文档没有标题"),
         wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
     outlineEmptyText_->Hide();
 
-    auto* outlineSizer = new wxBoxSizer(wxVERTICAL);
-    outlineSizer->Add(title, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP,
-                      FromDIP(16));
-    outlineSizer->Add(outlineList_, 1, wxEXPAND | wxALL, FromDIP(8));
-    outlineSizer->Add(outlineEmptyText_, 1,
+    auto* contentSizer = new wxBoxSizer(wxVERTICAL);
+    contentSizer->Add(outlineTitle_, 0,
+                      wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    contentSizer->Add(outlineList_, 1, wxEXPAND | wxALL, FromDIP(8));
+    contentSizer->Add(outlineEmptyText_, 1,
                       wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
-    outlinePanel_->SetSizer(outlineSizer);
+    outlineContentPanel_->SetSizer(contentSizer);
+
+    auto* toggleSizer = new wxBoxSizer(wxVERTICAL);
+    toggleSizer->AddStretchSpacer();
+    toggleSizer->Add(outlineToggleButton_, 0, wxALIGN_CENTER_HORIZONTAL);
+    toggleSizer->AddStretchSpacer();
+
+    auto* panelSizer = new wxBoxSizer(wxHORIZONTAL);
+    panelSizer->Add(outlineContentPanel_, 1, wxEXPAND);
+    panelSizer->Add(toggleSizer, 0, wxEXPAND);
+    outlinePanel_->SetSizer(panelSizer);
     outlinePanel_->Hide();
 }
 
@@ -724,6 +766,8 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnRecentFile, this, ID_RECENT_FIRST,
          ID_RECENT_LAST);
     Bind(wxEVT_MENU, &MainFrame::OnOutline, this, ID_OUTLINE);
+    Bind(wxEVT_BUTTON, &MainFrame::OnOutlineToggle, this,
+         ID_OUTLINE_TOGGLE);
     Bind(wxEVT_LISTBOX, &MainFrame::OnOutlineItem, this, ID_OUTLINE_LIST);
     Bind(wxEVT_MENU, &MainFrame::OnFind, this, ID_FIND);
     Bind(wxEVT_MENU, &MainFrame::OnFindNext, this, ID_FIND_NEXT);
@@ -771,8 +815,19 @@ void MainFrame::ApplyTheme() {
     if (outlinePanel_ != nullptr) {
         outlinePanel_->SetBackgroundColour(palette.documentBackground);
         outlinePanel_->SetForegroundColour(palette.text);
+        if (outlineContentPanel_ != nullptr) {
+            outlineContentPanel_->SetBackgroundColour(
+                palette.documentBackground);
+            outlineContentPanel_->SetForegroundColour(palette.text);
+        }
         outlineList_->ApplyTheme(palette);
         outlineEmptyText_->SetForegroundColour(palette.mutedText);
+        if (outlineTitle_ != nullptr) {
+            outlineTitle_->SetForegroundColour(palette.text);
+        }
+        if (outlineToggleButton_ != nullptr) {
+            outlineToggleButton_->ApplyTheme(palette);
+        }
     }
     if (findBar_ != nullptr) {
         findBar_->SetBackgroundColour(palette.windowBackground);

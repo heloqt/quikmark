@@ -36,6 +36,7 @@ namespace litemark {
 
 class DocumentView;
 class OutlineList;
+class OutlineToggleButton;
 class TabStrip;
 
 class MainFrame : public wxFrame {
@@ -55,6 +56,7 @@ private:
         ID_APPEARANCE_LIGHT,
         ID_APPEARANCE_DARK,
         ID_OUTLINE,
+        ID_OUTLINE_TOGGLE,
         ID_NEXT_TAB,
         ID_PREVIOUS_TAB,
         ID_RECENT_FIRST,
@@ -89,10 +91,11 @@ private:
     void CreateMenuBar();
     void CreateFindBar();
     void CreateOutlinePanel();
-    void SetOutlineVisible(bool visible);
+    void SetOutlineState(OutlineState state);
     void LayoutOutlinePanel();
     void UpdateOutline();
     void OnOutline(wxCommandEvent& event);
+    void OnOutlineToggle(wxCommandEvent& event);
     void OnOutlineItem(wxCommandEvent& event);
     void OnFrameSize(wxSizeEvent& event);
     void BindEvents();
@@ -163,9 +166,13 @@ private:
     wxTextCtrl* findText_ = nullptr;
     wxStaticText* findStatus_ = nullptr;
     wxPanel* outlinePanel_ = nullptr;
+    wxPanel* outlineContentPanel_ = nullptr;
     wxBoxSizer* contentSizer_ = nullptr;
+    wxStaticText* outlineTitle_ = nullptr;
+    OutlineToggleButton* outlineToggleButton_ = nullptr;
     OutlineList* outlineList_ = nullptr;
     wxStaticText* outlineEmptyText_ = nullptr;
+    OutlineState outlineState_ = OutlineState::Hidden;
     bool updatingOutline_ = false;
     wxMenu* recentMenu_ = nullptr;
     wxTimer findTimer_;

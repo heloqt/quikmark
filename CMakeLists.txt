@@ -64,6 +64,7 @@ add_executable(litemark WIN32
     src/ui/DocumentView.cpp
     src/ui/MainFrame.cpp
     src/ui/OutlineList.cpp
+    src/ui/OutlineToggleButton.cpp
     src/ui/TabStrip.cpp
     src/ui/ThemeController.cpp
 )

@@ -193,6 +193,26 @@ function Get-VisibleEditControl([IntPtr]$Parent) {
     return $items | Select-Object -First 1
 }
 
+function Get-VisibleButtonByText([IntPtr]$Parent, [string]$ExpectedText) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][P2RegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        if ([P2RegressionNative]::IsWindowVisible($handle)) {
+            $text = [Text.StringBuilder]::new(32)
+            [void][P2RegressionNative]::GetWindowText($handle, $text, 32)
+            if ($text.ToString() -eq $ExpectedText) {
+                [void]$items.Add($handle)
+            }
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    $first = @($items | Select-Object -First 1)
+    if ($first.Count -gt 0) {
+        return [IntPtr]$first[0]
+    }
+    return [IntPtr]::Zero
+}
+
 function Get-VisibleWindowTexts([IntPtr]$Parent) {
     $items = [System.Collections.ArrayList]::new()
     [void][P2RegressionNative]::EnumChildWindows($Parent, {
@@ -417,6 +437,10 @@ $anchorProcess = Start-Process -FilePath $Exe -ArgumentList $anchorFile -PassThr
 try {
     Wait-Title $anchorProcess "anchor.md*"
     Start-Sleep -Milliseconds 700
+    [void][P2RegressionNative]::SetWindowPos(
+        $anchorProcess.MainWindowHandle, [IntPtr]::Zero,
+        80, 70, 1400, 780, 0x0014)
+    Start-Sleep -Milliseconds 300
     $document = Get-LargestChild $anchorProcess.MainWindowHandle
     Focus-Window $anchorProcess.MainWindowHandle $document.Handle
     Send-MouseDrag $document.Handle 65 52 65 52
@@ -433,6 +457,10 @@ try {
         $document.Handle, [ref]$documentRectBefore)
     $documentWidthBefore =
         $documentRectBefore.Right - $documentRectBefore.Left
+    if ((Get-VisibleButtonByText `
+            $anchorProcess.MainWindowHandle "▶") -ne [IntPtr]::Zero) {
+        throw "Outline toggle was visible before View > Outline was enabled."
+    }
     Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
     $outlineList = Get-VisibleListBox $anchorProcess.MainWindowHandle
     if ($outlineList -eq $null) {
@@ -443,7 +471,8 @@ try {
     if ($outlineCount -lt 1) {
         throw "Outline drawer did not contain headings."
     }
-    $outlinePanel = [P2RegressionNative]::GetParent($outlineList)
+    $outlineContentPanel = [P2RegressionNative]::GetParent($outlineList)
+    $outlinePanel = [P2RegressionNative]::GetParent($outlineContentPanel)
     $outlineRect = [P2RegressionNative+RECT]::new()
     $mainClientRect = [P2RegressionNative+RECT]::new()
     $documentRectAfter = [P2RegressionNative+RECT]::new()
@@ -452,16 +481,44 @@ try {
         $anchorProcess.MainWindowHandle, [ref]$mainClientRect)
     [void][P2RegressionNative]::GetWindowRect(
         $document.Handle, [ref]$documentRectAfter)
-    $outlineRatio =
-        ($outlineRect.Right - $outlineRect.Left) /
-        [double]($mainClientRect.Right - $mainClientRect.Left)
-    if ($outlineRatio -lt 0.20 -or $outlineRatio -gt 0.30) {
-        throw "Outline width ratio was $outlineRatio."
+    $outlineWidth = $outlineRect.Right - $outlineRect.Left
+    if ([math]::Abs($outlineWidth - 260) -gt 8) {
+        throw "Outline width was $outlineWidth px, expected fixed width 260 px."
     }
     $documentWidthAfter =
         $documentRectAfter.Right - $documentRectAfter.Left
     if ($documentWidthAfter -ge $documentWidthBefore - 100) {
         throw "Docked outline did not reflow the document."
+    }
+    $collapseButton = Get-VisibleButtonByText `
+        $anchorProcess.MainWindowHandle "◀"
+    if ($collapseButton -eq [IntPtr]::Zero) {
+        throw "Collapse triangle was not visible."
+    }
+    [void][P2RegressionNative]::SendMessage(
+        [IntPtr]$collapseButton, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+    if ((Get-VisibleListBox $anchorProcess.MainWindowHandle) -ne $null) {
+        throw "Outline list remained visible after triangle collapse."
+    }
+    $collapsedRect = [P2RegressionNative+RECT]::new()
+    [void][P2RegressionNative]::GetWindowRect(
+        $outlinePanel, [ref]$collapsedRect)
+    $collapsedWidth = $collapsedRect.Right - $collapsedRect.Left
+    if ($collapsedWidth -gt 50) {
+        throw "Collapsed outline rail was too wide: $collapsedWidth px."
+    }
+    $expandButton = Get-VisibleButtonByText `
+        $anchorProcess.MainWindowHandle "▶"
+    if ($expandButton -eq [IntPtr]::Zero) {
+        throw "Expand triangle was not visible after collapse."
+    }
+    [void][P2RegressionNative]::SendMessage(
+        [IntPtr]$expandButton, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+    $outlineList = Get-VisibleListBox $anchorProcess.MainWindowHandle
+    if ($outlineList -eq $null) {
+        throw "Outline list did not return after triangle expansion."
     }
     $outlineClick = [IntPtr]((10 -shl 16) -bor 20)
     [void][P2RegressionNative]::SendMessage(
@@ -473,17 +530,38 @@ try {
     if ($outlinePosition -le 0) {
         throw "Outline item click did not scroll the document."
     }
-    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
+    $collapseButton = Get-VisibleButtonByText `
+        $anchorProcess.MainWindowHandle "◀"
+    [void][P2RegressionNative]::SendMessage(
+        [IntPtr]$collapseButton, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
     if ([P2RegressionNative]::IsWindowVisible($outlineList)) {
-        throw "Outline drawer did not close."
+        throw "Outline drawer did not collapse."
     }
     $documentRectRestored = [P2RegressionNative+RECT]::new()
     [void][P2RegressionNative]::GetWindowRect(
         $document.Handle, [ref]$documentRectRestored)
     $documentWidthRestored =
         $documentRectRestored.Right - $documentRectRestored.Left
-    if ([math]::Abs($documentWidthRestored - $documentWidthBefore) -gt 4) {
-        throw "Document width was not restored after closing the outline."
+    $collapsedBodyLoss = $documentWidthBefore - $documentWidthRestored
+    if ($collapsedBodyLoss -lt 10 -or $collapsedBodyLoss -gt 60) {
+        throw "Collapsed outline rail width was unexpected: $documentWidthRestored."
+    }
+    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
+    Start-Sleep -Milliseconds 250
+    if ([P2RegressionNative]::IsWindowVisible($outlinePanel)) {
+        throw "Unchecking View > Outline did not fully hide the outline."
+    }
+    if ((Get-VisibleButtonByText `
+            $anchorProcess.MainWindowHandle "▶") -ne [IntPtr]::Zero) {
+        throw "Outline toggle remained visible after hiding the outline."
+    }
+    [void][P2RegressionNative]::GetWindowRect(
+        $document.Handle, [ref]$documentRectRestored)
+    $documentWidthHidden =
+        $documentRectRestored.Right - $documentRectRestored.Left
+    if ([math]::Abs($documentWidthHidden - $documentWidthBefore) -gt 4) {
+        throw "Document width was not restored after hiding the outline."
     }
 } finally {
     if ($anchorProcess -and -not $anchorProcess.HasExited) {
@@ -532,6 +610,7 @@ if ($workspace -notmatch "tabs.count=2" -or
     $workspace -notmatch "recent.count=2" -or
     $workspace -notmatch "window.width=1000" -or
     $workspace -notmatch "outline.visible=1" -or
+    $workspace -notmatch "outline.state=expanded" -or
     $workspace -notmatch "tab\.0\.scroll=([1-9][0-9]*)") {
     throw "Workspace state did not contain the expected tabs, recents, or geometry."
 }
@@ -632,7 +711,7 @@ try {
     DragHighlightPixels = $selectionPixels
     SearchHighlightPixels = $searchPixels
     InternalAnchorClick = "PASS ($anchorPosition px)"
-    OutlineSidebar = "PASS ($outlineCount items, $([math]::Round($outlineRatio * 100))%)"
+    OutlineSidebar = "PASS ($outlineCount items, ${outlineWidth}px)"
     OutlineBodyReflow = "PASS ($documentWidthBefore -> $documentWidthAfter -> $documentWidthRestored)"
     OutlinePersistentState = "PASS"
     OutlineWheel = "PASS ($largeOutlineCount items, $outlineWheelMilliseconds ms)"

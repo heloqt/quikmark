@@ -12,6 +12,12 @@ struct SavedTabState {
     int scrollY = 0;
 };
 
+enum class OutlineState {
+    Hidden,
+    Expanded,
+    Collapsed
+};
+
 struct WorkspaceState {
     bool hasWindowPlacement = false;
     int windowX = 0;
@@ -19,7 +25,7 @@ struct WorkspaceState {
     int windowWidth = 0;
     int windowHeight = 0;
     bool maximized = false;
-    bool outlineVisible = false;
+    OutlineState outlineState = OutlineState::Hidden;
     std::size_t selectedTab = 0;
     std::vector<SavedTabState> tabs;
     std::vector<std::string> recentFiles;
