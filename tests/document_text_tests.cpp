@@ -114,6 +114,25 @@ void TestEmptySelectionAndFullDocument() {
           "full selection should contain table text");
 }
 
+void TestParagraphFragmentsCopyWithoutInsertedNewline() {
+    litemark::MarkdownDocument document;
+    litemark::Block first;
+    first.kind = litemark::BlockKind::Text;
+    first.spans.push_back({"alpha ", false, false, false, false, false, ""});
+    document.blocks.push_back(first);
+
+    litemark::Block second;
+    second.kind = litemark::BlockKind::Text;
+    second.continuesPreviousBlock = true;
+    second.spans.push_back({"beta", false, false, false, false, false, ""});
+    document.blocks.push_back(second);
+
+    const auto text = litemark::PlainTextForSelection(
+        document, {{0, 0}, {1, 4}});
+    Check(text == "alpha beta",
+          "paragraph fragments must not add a synthetic newline");
+}
+
 }  // namespace
 
 int main() {
@@ -123,11 +142,12 @@ int main() {
     TestReversedSelection();
     TestUtf8BoundaryClamping();
     TestEmptySelectionAndFullDocument();
+    TestParagraphFragmentsCopyWithoutInsertedNewline();
     if (failures != 0) {
         std::cerr << "document_text_tests: " << failures
                   << " check(s) failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "document_text_tests: 6 cases passed\n";
+    std::cout << "document_text_tests: 7 cases passed\n";
     return EXIT_SUCCESS;
 }

@@ -508,6 +508,9 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
 }
 
 int IntrinsicBefore(const litemark::Block& block) {
+    if (block.continuesPreviousBlock) {
+        return 0;
+    }
     if (block.kind == litemark::BlockKind::Heading) {
         return block.headingLevel <= 2 ? 16 : 12;
     }
@@ -520,6 +523,9 @@ int IntrinsicBefore(const litemark::Block& block) {
 }
 
 int IntrinsicAfter(const litemark::Block& block) {
+    if (block.continuesNextBlock) {
+        return 0;
+    }
     if (block.kind == litemark::BlockKind::Heading) {
         return 10;
     }
@@ -1785,13 +1791,24 @@ struct DocumentView::Impl {
         std::vector<int> desired(columnCount, minColumnWidth);
         for (std::size_t c = 0; c < columnCount; ++c) {
             int contentWidth = 0;
-            for (std::size_t r = 0; r < rowCount; ++r) {
+            const std::size_t measuredRows =
+                block.tableColumnWidthHints.empty()
+                    ? rowCount
+                    : std::min<std::size_t>(rowCount, 32);
+            for (std::size_t r = 0; r < measuredRows; ++r) {
                 if (c < block.tableRows[r].size()) {
                     contentWidth = std::max(
                         contentWidth,
                         MeasureCellWidth(dc, block.tableRows[r][c].spans,
                                          r == 0));
                 }
+            }
+            if (c < block.tableColumnWidthHints.size()) {
+                contentWidth = std::max(
+                    contentWidth,
+                    static_cast<int>(std::lround(
+                        block.tableColumnWidthHints[c] * 9 * scale *
+                        fontScale)));
             }
             desired[c] = std::clamp(contentWidth + cellPadding * 2,
                                     minColumnWidth, desiredColumnWidth);
@@ -1853,7 +1870,7 @@ struct DocumentView::Impl {
                 cell.width = columnWidths[c];
                 TextStyle style;
                 style.pointSize = 10;
-                style.bold = r == 0;
+                style.bold = block.tableFirstRowIsHeader && r == 0;
                 if (c < block.tableRows[r].size()) {
                     BuildTextLayout(dc, cell.text,
                                     columnWidths[c] - cellPadding * 2,
@@ -2263,6 +2280,7 @@ struct DocumentView::Impl {
         if (item.tableRows.empty()) {
             return;
         }
+        const Block& block = *item.block;
 
         const int padding = std::max(5, static_cast<int>(std::lround(
                                            9 * (dc.GetPPI().x / 96.0))));
@@ -2275,11 +2293,13 @@ struct DocumentView::Impl {
 
         for (std::size_t r = 0; r < item.tableRows.size(); ++r) {
             const RowLayout& row = item.tableRows[r];
-            if (r == 0) {
+            const bool header =
+                block.tableFirstRowIsHeader && r == 0;
+            if (header) {
                 dc.SetBrush(wxBrush(palette.codeBackground));
                 dc.DrawRectangle(item.x, item.y + row.y, item.width,
                                  row.height);
-            } else if (r % 2 == 0) {
+            } else if ((block.tableRowOffset + r) % 2 == 0) {
                 dc.SetBrush(wxBrush(palette.windowBackground));
                 dc.DrawRectangle(item.x, item.y + row.y, item.width,
                                  row.height);
@@ -2301,7 +2321,7 @@ struct DocumentView::Impl {
         for (std::size_t r = 0; r < item.tableRows.size(); ++r) {
             const RowLayout& row = item.tableRows[r];
             const int rowBottom = item.y + row.y + row.height;
-            if (r == 0) {
+            if (block.tableFirstRowIsHeader && r == 0) {
                 dc.SetPen(wxPen(palette.border, 2));
             } else {
                 dc.SetPen(wxPen(palette.border, 1));

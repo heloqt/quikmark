@@ -49,6 +49,13 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File .\run-benchmark.ps1 -Samples 20 -LargeSamples 5 -Name run2
 ```
 
+6. 超大单块压力测试：
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass `
+     -File .\scripts\block-stress-benchmark.ps1 -Samples 5
+   ```
+
 ## 电源模式对比
 
 如系统允许通过 `powercfg` 修改电源模式：

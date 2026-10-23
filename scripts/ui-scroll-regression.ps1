@@ -44,16 +44,23 @@ function Wait-Title(
 ) {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
-        $Process.Refresh()
-        if ($Process.HasExited) {
+        $live = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
+        if ($null -eq $live) {
             throw "Process exited while waiting for title '$Pattern'."
         }
-        if ($Process.MainWindowTitle -like $Pattern) {
+        $live.Refresh()
+        if ($live.MainWindowTitle -like $Pattern) {
             return
         }
         Start-Sleep -Milliseconds 25
     }
-    throw "Timed out waiting for title '$Pattern'."
+    $live = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
+    $actual = if ($null -eq $live) {
+        "<exited>"
+    } else {
+        "title='$($live.MainWindowTitle)' hwnd=$($live.MainWindowHandle)"
+    }
+    throw "Timed out waiting for title '$Pattern'; $actual."
 }
 
 function Get-LargestChild([IntPtr]$Parent) {
@@ -96,6 +103,11 @@ function Send-WheelDown([IntPtr]$Window, [int]$Count) {
             $Window, 0x020A, $wParam, $lParam)
         Start-Sleep -Milliseconds 40
     }
+}
+
+function Send-NextTabCommand([IntPtr]$Window) {
+    [void][ScrollRegressionNative]::SendMessage(
+        $Window, 0x0111, [IntPtr]6009, [IntPtr]::Zero)
 }
 
 $projectRoot = (Get-Location).Path
@@ -174,10 +186,7 @@ try {
 
     [void][ScrollRegressionNative]::SetForegroundWindow(
         $primary.MainWindowHandle)
-    [ScrollRegressionNative]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
-    [ScrollRegressionNative]::keybd_event(0x09, 0, 0, [UIntPtr]::Zero)
-    [ScrollRegressionNative]::keybd_event(0x09, 0, 0x0002, [UIntPtr]::Zero)
-    [ScrollRegressionNative]::keybd_event(0x11, 0, 0x0002, [UIntPtr]::Zero)
+    Send-NextTabCommand $primary.MainWindowHandle
     Wait-Title $primary "first.md*"
     Start-Sleep -Milliseconds 300
     $document = Get-LargestChild $primary.MainWindowHandle

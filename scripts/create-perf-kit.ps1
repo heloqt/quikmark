@@ -26,6 +26,7 @@ New-Item -ItemType Directory -Path $toolDirectory -Force | Out-Null
 Copy-Item -LiteralPath $Exe -Destination (Join-Path $OutputDirectory "liteMark.exe")
 foreach ($name in @(
     "benchmark.ps1",
+    "block-stress-benchmark.ps1",
     "compare-power-modes.ps1",
     "continuous-scroll-benchmark.ps1"
 )) {

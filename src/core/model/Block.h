@@ -49,6 +49,8 @@ struct Block {
     bool listMarker = false;
     bool task = false;
     bool taskChecked = false;
+    bool continuesPreviousBlock = false;
+    bool continuesNextBlock = false;
     std::vector<InlineSpan> spans;
     std::string raw;
     std::string language;
@@ -56,6 +58,9 @@ struct Block {
     std::string imageAlt;
     std::string flowSource;
     std::vector<std::vector<TableCell>> tableRows;
+    std::vector<std::size_t> tableColumnWidthHints;
+    std::size_t tableRowOffset = 0;
+    bool tableFirstRowIsHeader = true;
 };
 
 struct MarkdownDocument {

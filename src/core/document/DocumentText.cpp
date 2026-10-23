@@ -124,7 +124,12 @@ std::string PlainTextForSelection(const MarkdownDocument& document,
         if (begin >= end) {
             continue;
         }
-        if (!output.empty()) {
+        const bool joinsParagraph =
+            index > range.start.blockIndex &&
+            document.blocks[index].continuesPreviousBlock &&
+            document.blocks[index].kind == BlockKind::Text &&
+            document.blocks[index - 1].kind == BlockKind::Text;
+        if (!output.empty() && !joinsParagraph) {
             output.push_back('\n');
         }
         output.append(blockText, begin, end - begin);

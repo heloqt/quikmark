@@ -180,11 +180,9 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
     throw "Timed out waiting for process $($Process.Id) window."
 }
 
-function Send-CtrlKey([byte]$Key) {
-    [BenchmarkNative]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
-    [BenchmarkNative]::keybd_event($Key, 0, 0, [UIntPtr]::Zero)
-    [BenchmarkNative]::keybd_event($Key, 0, 0x0002, [UIntPtr]::Zero)
-    [BenchmarkNative]::keybd_event(0x11, 0, 0x0002, [UIntPtr]::Zero)
+function Send-NextTabCommand([IntPtr]$Window) {
+    [void][BenchmarkNative]::SendMessage(
+        $Window, 0x0111, [IntPtr]6009, [IntPtr]::Zero)
 }
 
 Add-Type @'
@@ -275,7 +273,7 @@ try {
     $switchCount = [math]::Min(40, $Samples * 2)
     for ($i = 0; $i -lt $switchCount; ++$i) {
         [void][BenchmarkNative]::SetForegroundWindow($primary.MainWindowHandle)
-        Send-CtrlKey 0x09
+        Send-NextTabCommand $primary.MainWindowHandle
         Wait-MetricCount $interactiveTrace "tab_switch" ($i + 1) 8
     }
 } finally {
@@ -347,7 +345,7 @@ try {
     for ($i = 0; $i -lt $largeSwitchCount; ++$i) {
         $largePrimary.Refresh()
         [void][BenchmarkNative]::SetForegroundWindow($largePrimary.MainWindowHandle)
-        Send-CtrlKey 0x09
+        Send-NextTabCommand $largePrimary.MainWindowHandle
         Wait-MetricCount $largeInteractiveTrace "tab_switch" ($i + 1) 20
     }
 

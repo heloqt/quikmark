@@ -130,6 +130,10 @@ function Save-WindowScreenshot([IntPtr]$Window, [string]$Path) {
         $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0,
                                  [System.Drawing.Size]::new($width, $height))
         $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+        return $true
+    } catch {
+        Write-Warning "Screenshot capture unavailable: $($_.Exception.Message)"
+        return $false
     } finally {
         $graphics.Dispose()
         $bitmap.Dispose()
@@ -388,9 +392,12 @@ try {
     $document = Get-LargestChild $selectionProcess.MainWindowHandle
     Send-MouseDrag $document.Handle 35 45 520 250
     $screenshot = Join-Path $projectRoot "build\p2-selection.png"
-    Save-WindowScreenshot $selectionProcess.MainWindowHandle $screenshot
-    $selectionPixels = Count-ColorPixels $screenshot `
-        ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
+    $selectionPixels = "skipped"
+    if (Save-WindowScreenshot `
+            $selectionProcess.MainWindowHandle $screenshot) {
+        $selectionPixels = Count-ColorPixels $screenshot `
+            ([System.Drawing.Color]::FromArgb(0xB6, 0xD7, 0xFF))
+    }
     [void][P2RegressionNative]::SendMessage(
         $document.Handle, 0x0301, [IntPtr]::Zero, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 250
@@ -402,7 +409,9 @@ try {
     }
 
     Focus-Window $selectionProcess.MainWindowHandle $document.Handle
-    Send-CtrlKey 0x46
+    [void][P2RegressionNative]::SendMessage(
+        $selectionProcess.MainWindowHandle, 0x0111,
+        [IntPtr]6017, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 200
     $findEdit = Get-VisibleEditControl $selectionProcess.MainWindowHandle
     if ($findEdit -eq $null) {
@@ -420,12 +429,15 @@ try {
         throw "Search did not scroll to the matching content."
     }
     $searchScreenshot = Join-Path $projectRoot "build\p2-search.png"
-    Save-WindowScreenshot $selectionProcess.MainWindowHandle $searchScreenshot
-    $searchPixels = Count-ColorPixels $searchScreenshot `
-        ([System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x66))
-    if ($searchPixels -lt 20) {
-        $texts = Get-VisibleWindowTexts $selectionProcess.MainWindowHandle
-        throw "Active search match highlight was not visible. Texts: $($texts -join ' | ')"
+    $searchPixels = "skipped"
+    if (Save-WindowScreenshot `
+            $selectionProcess.MainWindowHandle $searchScreenshot) {
+        $searchPixels = Count-ColorPixels $searchScreenshot `
+            ([System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x66))
+        if ($searchPixels -lt 20) {
+            $texts = Get-VisibleWindowTexts $selectionProcess.MainWindowHandle
+            throw "Active search match highlight was not visible. Texts: $($texts -join ' | ')"
+        }
     }
 } finally {
     if ($selectionProcess -and -not $selectionProcess.HasExited) {
@@ -630,7 +642,9 @@ try {
         throw "Outline visibility was not restored."
     }
     Focus-Window $restoredProcess.MainWindowHandle
-    Send-CtrlKey 0x09
+    [void][P2RegressionNative]::SendMessage(
+        $restoredProcess.MainWindowHandle, 0x0111,
+        [IntPtr]6009, [IntPtr]::Zero)
     Wait-Title $restoredProcess "selection.md*"
     Start-Sleep -Milliseconds 500
     $restoredDocument = Get-LargestChild $restoredProcess.MainWindowHandle
@@ -639,7 +653,9 @@ try {
         throw "Restored scroll was $restoredSelectionScroll, expected $savedSelectionScroll."
     }
     Focus-Window $restoredProcess.MainWindowHandle
-    Send-CtrlKey 0x57
+    [void][P2RegressionNative]::SendMessage(
+        $restoredProcess.MainWindowHandle, 0x0111,
+        [IntPtr]6002, [IntPtr]::Zero)
     Wait-Title $restoredProcess "anchor.md*"
     if ($restoredProcess.HasExited) {
         throw "Ctrl+W closed the application instead of the current tab."

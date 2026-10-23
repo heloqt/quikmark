@@ -221,6 +221,7 @@ if(LITEMARK_BUILD_TESTS)
 
     add_executable(litemark_markdown_requirements_tests
         tests/markdown_requirements_tests.cpp
+        src/core/document/DocumentText.cpp
         src/core/flow/Flowchart.cpp
         src/core/parser/MarkdownParser.cpp
     )

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -511,6 +512,198 @@ void NormalizeImages(MarkdownDocument& document) {
     document.blocks = std::move(normalized);
 }
 
+constexpr std::size_t kMaxTextDisplayBytes = 12 * 1024;
+constexpr std::size_t kMaxTableDataRows = 64;
+
+std::size_t Utf8CharacterCount(std::string_view text) {
+    std::size_t count = 0;
+    for (unsigned char value : text) {
+        if ((value & 0xC0U) != 0x80U) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::size_t FindTextCut(std::string_view text, std::size_t start,
+                        std::size_t maximumBytes) {
+    const std::size_t remaining = text.size() - start;
+    if (remaining <= maximumBytes) {
+        return text.size();
+    }
+
+    std::size_t cut = start + maximumBytes;
+    const std::size_t floor = start + maximumBytes / 2;
+    for (std::size_t index = cut; index > floor; --index) {
+        const char value = text[index - 1];
+        if (value == '\n' || value == ' ' || value == '\t') {
+            return index;
+        }
+    }
+
+    while (cut > start &&
+           (static_cast<unsigned char>(text[cut]) & 0xC0U) == 0x80U) {
+        --cut;
+    }
+    if (cut == start) {
+        cut = start + 1;
+        while (cut < text.size() &&
+               (static_cast<unsigned char>(text[cut]) & 0xC0U) == 0x80U) {
+            ++cut;
+        }
+    }
+    return cut;
+}
+
+Block DisplayBlockMetadata(const Block& block) {
+    Block metadata;
+    metadata.id = block.id;
+    metadata.kind = block.kind;
+    metadata.headingLevel = block.headingLevel;
+    metadata.quoteDepth = block.quoteDepth;
+    metadata.listDepth = block.listDepth;
+    metadata.listIndex = block.listIndex;
+    metadata.listOrdered = block.listOrdered;
+    metadata.listMarker = block.listMarker;
+    metadata.task = block.task;
+    metadata.taskChecked = block.taskChecked;
+    metadata.language = block.language;
+    metadata.tableRowOffset = block.tableRowOffset;
+    metadata.tableFirstRowIsHeader = block.tableFirstRowIsHeader;
+    return metadata;
+}
+
+void SplitTextBlock(Block block, std::vector<Block>* output) {
+    std::size_t totalBytes = 0;
+    for (const InlineSpan& span : block.spans) {
+        totalBytes += span.text.size();
+    }
+    if (totalBytes <= kMaxTextDisplayBytes) {
+        output->push_back(std::move(block));
+        return;
+    }
+
+    std::vector<std::vector<InlineSpan>> fragments;
+    std::vector<InlineSpan> current;
+    std::size_t currentBytes = 0;
+    auto flush = [&]() {
+        if (!current.empty()) {
+            fragments.push_back(std::move(current));
+            current.clear();
+            currentBytes = 0;
+        }
+    };
+
+    for (const InlineSpan& span : block.spans) {
+        std::size_t position = 0;
+        while (position < span.text.size()) {
+            if (currentBytes >= kMaxTextDisplayBytes) {
+                flush();
+            }
+            const std::size_t take = FindTextCut(
+                span.text, position,
+                kMaxTextDisplayBytes - currentBytes);
+            if (take <= position) {
+                break;
+            }
+            InlineSpan piece;
+            piece.bold = span.bold;
+            piece.italic = span.italic;
+            piece.strikethrough = span.strikethrough;
+            piece.code = span.code;
+            piece.image = span.image;
+            piece.href = span.href;
+            piece.text = span.text.substr(position, take - position);
+            currentBytes += piece.text.size();
+            position = take;
+            current.push_back(std::move(piece));
+            if (currentBytes >= kMaxTextDisplayBytes) {
+                flush();
+            }
+        }
+    }
+    flush();
+
+    if (fragments.size() <= 1) {
+        output->push_back(std::move(block));
+        return;
+    }
+
+    for (std::size_t index = 0; index < fragments.size(); ++index) {
+        Block fragment = DisplayBlockMetadata(block);
+        fragment.spans = std::move(fragments[index]);
+        fragment.listMarker = block.listMarker && index == 0;
+        fragment.continuesPreviousBlock =
+            index == 0 ? block.continuesPreviousBlock : true;
+        fragment.continuesNextBlock =
+            index + 1 < fragments.size() || block.continuesNextBlock;
+        output->push_back(std::move(fragment));
+    }
+}
+
+void SplitTableBlock(Block block, std::vector<Block>* output) {
+    if (block.tableRows.size() <= kMaxTableDataRows + 1) {
+        output->push_back(std::move(block));
+        return;
+    }
+
+    std::size_t columnCount = 0;
+    for (const auto& row : block.tableRows) {
+        columnCount = std::max(columnCount, row.size());
+    }
+    std::vector<std::size_t> widthHints(columnCount, 0);
+    for (const auto& row : block.tableRows) {
+        for (std::size_t column = 0;
+             column < row.size() && column < columnCount; ++column) {
+            std::size_t characters = 0;
+            for (const InlineSpan& span : row[column].spans) {
+                characters += Utf8CharacterCount(span.text);
+            }
+            widthHints[column] = std::max(widthHints[column], characters);
+        }
+    }
+
+    const std::size_t dataStart = 1;
+    for (std::size_t start = dataStart;
+         start < block.tableRows.size();
+         start += kMaxTableDataRows) {
+        const std::size_t end = std::min(
+            block.tableRows.size(), start + kMaxTableDataRows);
+        Block chunk = DisplayBlockMetadata(block);
+        chunk.tableRows.clear();
+        chunk.tableRows.reserve(1 + end - start);
+        if (start == dataStart) {
+            chunk.tableRows.push_back(block.tableRows.front());
+        }
+        for (std::size_t row = start; row < end; ++row) {
+            chunk.tableRows.push_back(block.tableRows[row]);
+        }
+        chunk.tableColumnWidthHints = widthHints;
+        chunk.tableRowOffset = start == dataStart ? 0 : start;
+        chunk.tableFirstRowIsHeader = start == dataStart;
+        chunk.continuesPreviousBlock =
+            start == dataStart ? block.continuesPreviousBlock : true;
+        chunk.continuesNextBlock =
+            end < block.tableRows.size() || block.continuesNextBlock;
+        output->push_back(std::move(chunk));
+    }
+}
+
+void SplitOversizedBlocks(MarkdownDocument& document) {
+    std::vector<Block> split;
+    split.reserve(document.blocks.size());
+    for (Block& block : document.blocks) {
+        if (block.kind == BlockKind::Text) {
+            SplitTextBlock(std::move(block), &split);
+        } else if (block.kind == BlockKind::Table) {
+            SplitTableBlock(std::move(block), &split);
+        } else {
+            split.push_back(std::move(block));
+        }
+    }
+    document.blocks = std::move(split);
+}
+
 void NormalizeBlocks(MarkdownDocument& document) {
     BlockId nextId = 1;
     for (auto& block : document.blocks) {
@@ -571,6 +764,7 @@ std::shared_ptr<const MarkdownDocument> MarkdownParser::Parse(
 
     const auto normalizeStarted = std::chrono::steady_clock::now();
     NormalizeImages(*document);
+    SplitOversizedBlocks(*document);
     NormalizeBlocks(*document);
     if (normalizeMicroseconds != nullptr) {
         *normalizeMicroseconds = static_cast<double>(

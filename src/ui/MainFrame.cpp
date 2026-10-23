@@ -54,6 +54,7 @@ struct ParseCompletion {
     litemark::FileLoadTimings timings;
     bool provisional = false;
     bool firstVisible = true;
+    bool cancelled = false;
     wxString error;
 };
 
@@ -973,6 +974,7 @@ void MainFrame::StartParse(const TabSession& tab) {
                             {},
                             true,
                             true,
+                            false,
                             {},
                         });
                         wxQueueEvent(this, event);
@@ -989,6 +991,21 @@ void MainFrame::StartParse(const TabSession& tab) {
                     .count());
 
             if (cancelled->load(std::memory_order_relaxed)) {
+                auto* event = new wxThreadEvent(
+                    wxEVT_THREAD, ID_PARSE_COMPLETED);
+                event->SetPayload(ParseCompletion{
+                    tabId,
+                    generation,
+                    {},
+                    {},
+                    parseMicroseconds,
+                    timings,
+                    false,
+                    false,
+                    true,
+                    {},
+                });
+                wxQueueEvent(this, event);
                 return;
             }
 
@@ -1003,6 +1020,7 @@ void MainFrame::StartParse(const TabSession& tab) {
                 timings,
                 false,
                 !prefixQueued,
+                false,
                 std::move(error),
             });
             wxQueueEvent(this, event);
@@ -1011,6 +1029,12 @@ void MainFrame::StartParse(const TabSession& tab) {
 
 void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     const ParseCompletion result = event.GetPayload<ParseCompletion>();
+    if (!result.provisional) {
+        ReapParseTask(result.tabId, result.generation);
+    }
+    if (result.cancelled) {
+        return;
+    }
     if (!tabs_.CompleteParse(result.tabId, result.generation,
                              result.content, result.document, result.error)) {
         return;
@@ -1066,6 +1090,23 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     }
     if (!result.provisional) {
         parseStartTimes_.erase(result.tabId);
+    }
+}
+
+void MainFrame::ReapParseTask(
+    std::uint64_t tabId,
+    std::uint64_t generation) {
+    for (auto iterator = parseTasks_.begin();
+         iterator != parseTasks_.end(); ++iterator) {
+        ParseTask& task = **iterator;
+        if (task.tabId != tabId || task.generation != generation) {
+            continue;
+        }
+        if (task.thread.joinable()) {
+            task.thread.join();
+        }
+        parseTasks_.erase(iterator);
+        return;
     }
 }
 

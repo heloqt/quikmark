@@ -108,6 +108,7 @@ private:
     void WatchFile(const wxString& path);
     void UnwatchFile(const wxString& path);
     void OnParseCompleted(wxThreadEvent& event);
+    void ReapParseTask(std::uint64_t tabId, std::uint64_t generation);
     void OnFileChanged(wxFileSystemWatcherEvent& event);
     void OnChangeTimer(wxTimerEvent& event);
     void SaveCurrentScroll();

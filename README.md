@@ -38,6 +38,7 @@ SHA256：
 - 跟随系统、浅色和暗色主题。
 - 文件变化检测、非模态重载提示和单实例运行。
 - 大文档先解析安全前缀并显示首屏，完整内容在后台继续解析。
+- 超长段落和超大表格自动分段，避免单个块阻塞首屏与滚动。
 
 完整使用方式见 [使用说明](doc/12-使用说明.md)。
 
@@ -93,6 +94,13 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\continuous-scroll-benchmark.ps1 `
   -Events 120 -IntervalMs 0
+```
+
+超大单段落和单表格压力：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\block-stress-benchmark.ps1 -Samples 5
 ```
 
 ## 打包

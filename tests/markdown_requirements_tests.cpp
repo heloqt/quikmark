@@ -1,4 +1,5 @@
 #include "core/flow/Flowchart.h"
+#include "core/document/DocumentText.h"
 #include "core/parser/MarkdownParser.h"
 
 #include <atomic>
@@ -249,6 +250,68 @@ void TestEmptyInputAndCancellation() {
           "cancelled parse should report cancellation");
 }
 
+void TestOversizedParagraphIsDisplayFragmented() {
+    const std::string source(30000, 'a');
+    const auto document = litemark::MarkdownParser::Parse(source);
+    Check(document != nullptr, "oversized paragraph should parse");
+    if (!document) {
+        return;
+    }
+    Check(document->blocks.size() > 1,
+          "oversized paragraph should create multiple display blocks");
+
+    std::string reconstructed;
+    for (std::size_t index = 0; index < document->blocks.size(); ++index) {
+        const auto& block = document->blocks[index];
+        Check(block.kind == litemark::BlockKind::Text,
+              "paragraph fragments should remain text blocks");
+        Check(block.continuesPreviousBlock == (index > 0),
+              "paragraph continuation flag mismatch");
+        Check(block.continuesNextBlock ==
+                  (index + 1 < document->blocks.size()),
+              "paragraph continuation-next flag mismatch");
+        reconstructed += litemark::BlockPlainText(block);
+    }
+    Check(reconstructed == source,
+          "paragraph fragmentation must preserve source text exactly");
+}
+
+void TestOversizedTableIsRowFragmented() {
+    std::string source = "| A | B |\n| --- | --- |\n";
+    for (int row = 0; row < 400; ++row) {
+        source += "| row " + std::to_string(row) + " | value " +
+                  std::to_string(row) + " |\n";
+    }
+    const auto document = litemark::MarkdownParser::Parse(source);
+    Check(document != nullptr, "oversized table should parse");
+    if (!document) {
+        return;
+    }
+
+    std::size_t tableCount = 0;
+    std::size_t dataRows = 0;
+    bool sawContinuation = false;
+    for (const auto& block : document->blocks) {
+        if (block.kind != litemark::BlockKind::Table) {
+            continue;
+        }
+        ++tableCount;
+        Check(block.tableColumnWidthHints.size() == 2,
+              "table chunks should retain column width hints");
+        if (block.tableFirstRowIsHeader) {
+            Check(block.tableRows.size() > 1,
+                  "first table chunk should contain a header and data");
+            dataRows += block.tableRows.size() - 1;
+        } else {
+            sawContinuation = true;
+            dataRows += block.tableRows.size();
+        }
+    }
+    Check(tableCount > 1, "oversized table should create multiple blocks");
+    Check(sawContinuation, "table continuation chunk missing");
+    Check(dataRows == 400, "table fragmentation lost or duplicated rows");
+}
+
 }  // namespace
 
 int main() {
@@ -257,11 +320,13 @@ int main() {
     TestImagesSplitTextAndPreserveAltAndPath();
     TestMermaidAndFormulaFallbacksRemainAvailable();
     TestEmptyInputAndCancellation();
+    TestOversizedParagraphIsDisplayFragmented();
+    TestOversizedTableIsRowFragmented();
     if (failures != 0) {
         std::cerr << "markdown_requirements_tests: " << failures
                   << " check(s) failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "markdown_requirements_tests: 5 cases passed\n";
+    std::cout << "markdown_requirements_tests: 7 cases passed\n";
     return EXIT_SUCCESS;
 }
