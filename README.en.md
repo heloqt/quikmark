@@ -120,7 +120,7 @@ The version is read automatically from `project(... VERSION ...)` in `CMakeLists
 
 - [Usage guide (Chinese)](doc/12-使用说明.md)
 - [Unit test matrix (Chinese)](doc/07-单元测试矩阵.md)
-- [Performance test record (Chinese)](doc/06-P1性能测试记录.md)
+- [Intel Core i5-14500 performance test record (Chinese)](doc/17-Intel-14500性能测试记录.md)
 - [Power mode comparison (Chinese)](doc/10-电源模式性能对比.md)
 - [Startup instrumentation and retest (Chinese)](doc/14-启动阶段打点与复测.md)
 - [Security software cold-start impact (Chinese)](doc/13-安全软件冷启动影响测试.md)

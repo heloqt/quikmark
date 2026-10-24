@@ -120,7 +120,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 - [使用说明](doc/12-使用说明.md)
 - [测试矩阵](doc/07-单元测试矩阵.md)
-- [性能测试记录](doc/06-P1性能测试记录.md)
+- [Intel Core i5-14500 性能测试记录](doc/17-Intel-14500性能测试记录.md)
 - [电源模式性能对比](doc/10-电源模式性能对比.md)
 - [启动阶段打点与复测](doc/14-启动阶段打点与复测.md)
 - [安全软件冷启动影响测试](doc/13-安全软件冷启动影响测试.md)
