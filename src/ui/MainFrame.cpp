@@ -139,7 +139,6 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     tabStrip_->SetOnClose([this](int index) { CloseTab(index); });
     theme_.SetOnChanged([this]() { ApplyTheme(); });
 
-    fileWatcher_.SetOwner(this);
     changeTimer_.SetOwner(this, ID_CHANGE_TIMER);
     findTimer_.SetOwner(this, ID_FIND_TIMER);
 
@@ -151,6 +150,7 @@ MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
     RestoreWorkspace();
     UpdateRecentMenu();
     SetOutlineState(workspace_.outlineState);
+    CallAfter([this]() { InitializeFileWatcher(); });
     TraceEvent("startup_restored",
                static_cast<double>(ProcessAgeMicroseconds()));
 }
@@ -1114,6 +1114,24 @@ void MainFrame::ReapParseTask(
     }
 }
 
+void MainFrame::InitializeFileWatcher() {
+    if (fileWatcher_) {
+        return;
+    }
+    fileWatcher_ = std::make_unique<wxFileSystemWatcher>();
+    fileWatcher_->SetOwner(this);
+    for (const auto& entry : watchedDirectories_) {
+        if (entry.second <= 0) {
+            continue;
+        }
+        const bool registered = fileWatcher_->Add(
+            wxFileName::DirName(entry.first),
+            wxFSW_EVENT_CREATE | wxFSW_EVENT_DELETE | wxFSW_EVENT_RENAME |
+                wxFSW_EVENT_MODIFY);
+        TraceEvent("file_watch_registered", registered ? 1 : 0);
+    }
+}
+
 void MainFrame::WatchFile(const wxString& path) {
     wxFileName file(path);
     file.MakeAbsolute();
@@ -1121,10 +1139,13 @@ void MainFrame::WatchFile(const wxString& path) {
     const wxString directory = file.GetPath();
     int& watches = watchedDirectories_[directory];
     if (watches++ == 0) {
-        fileWatcher_.Add(
-            wxFileName::DirName(directory),
-            wxFSW_EVENT_CREATE | wxFSW_EVENT_DELETE | wxFSW_EVENT_RENAME |
-                wxFSW_EVENT_MODIFY);
+        if (fileWatcher_) {
+            const bool registered = fileWatcher_->Add(
+                wxFileName::DirName(directory),
+                wxFSW_EVENT_CREATE | wxFSW_EVENT_DELETE |
+                    wxFSW_EVENT_RENAME | wxFSW_EVENT_MODIFY);
+            TraceEvent("file_watch_registered", registered ? 1 : 0);
+        }
     }
 }
 
@@ -1138,7 +1159,9 @@ void MainFrame::UnwatchFile(const wxString& path) {
         return;
     }
     if (--found->second <= 0) {
-        fileWatcher_.Remove(wxFileName::DirName(directory));
+        if (fileWatcher_) {
+            fileWatcher_->Remove(wxFileName::DirName(directory));
+        }
         watchedDirectories_.erase(found);
     }
 }
@@ -1153,6 +1176,7 @@ void MainFrame::OnFileChanged(wxFileSystemWatcherEvent& event) {
     const wxString newPath = event.GetNewPath().GetFullPath();
     if (tabs_.MarkExternalChange(path) ||
         (!newPath.empty() && tabs_.MarkExternalChange(newPath))) {
+        TraceEvent("file_change_detected", 0);
         changeTimer_.StartOnce(350);
         UpdateTabStrip();
     }
@@ -1281,7 +1305,7 @@ void MainFrame::OnCloseTab(wxCommandEvent&) {
 void MainFrame::OnRegisterFileAssociation(wxCommandEvent&) {
     const int answer = wxMessageBox(
         U8("将 liteMark 注册为 .md 和 .markdown 文件的打开方式？\n"
-           "该操作只修改当前 Windows 用户的文件关联。"),
+           "该操作只修改当前用户的文件关联。"),
         U8("注册文件关联"), wxYES_NO | wxICON_QUESTION, this);
     if (answer != wxYES) {
         return;

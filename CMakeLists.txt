@@ -108,6 +108,8 @@ elseif(UNIX AND NOT APPLE)
         src/platform/linux/SingletonGuard.cpp
     )
     add_executable(litemark ${LITEMARK_SOURCES})
+    find_package(CURL REQUIRED)
+    target_link_libraries(litemark PRIVATE CURL::libcurl)
 else()
     message(FATAL_ERROR "liteMark currently supports Windows and Linux only")
 endif()
@@ -386,6 +388,39 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME workspace_state COMMAND litemark_workspace_state_tests)
 
+    if(UNIX AND NOT APPLE)
+        add_executable(litemark_image_downloader_tests
+            tests/linux_image_downloader_tests.cpp
+            src/platform/linux/ImageDownloader.cpp
+        )
+        target_include_directories(litemark_image_downloader_tests PRIVATE src)
+        target_link_libraries(litemark_image_downloader_tests PRIVATE
+            wxWidgets::base
+            CURL::libcurl
+            Threads::Threads
+        )
+        add_test(NAME image_downloader_linux
+            COMMAND litemark_image_downloader_tests)
+
+        find_program(XVFB_RUN_EXECUTABLE xvfb-run)
+        if(XVFB_RUN_EXECUTABLE)
+            add_executable(litemark_file_association_tests
+                tests/linux_file_association_tests.cpp
+                src/platform/linux/FileAssociation.cpp
+            )
+            target_include_directories(
+                litemark_file_association_tests PRIVATE src)
+            target_link_libraries(litemark_file_association_tests PRIVATE
+                wxWidgets::core
+                wxWidgets::base
+                Threads::Threads
+            )
+            add_test(NAME file_association_linux
+                COMMAND "${XVFB_RUN_EXECUTABLE}" -a
+                    $<TARGET_FILE:litemark_file_association_tests>)
+        endif()
+    endif()
+
     set_tests_properties(
         pending_scroll_state
         parser_smoke
@@ -403,4 +438,10 @@ if(LITEMARK_BUILD_TESTS)
         workspace_state
         PROPERTIES LABELS "unit"
     )
+    if(UNIX AND NOT APPLE)
+        set_tests_properties(image_downloader_linux PROPERTIES LABELS "unit")
+        if(TARGET litemark_file_association_tests)
+            set_tests_properties(file_association_linux PROPERTIES LABELS "unit")
+        endif()
+    endif()
 endif()

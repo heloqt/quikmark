@@ -5,4 +5,5 @@ Comment=Lightweight native Markdown reader
 Exec=litemark %F
 Terminal=false
 Categories=Office;Viewer;
+MimeType=text/markdown;
 StartupNotify=true

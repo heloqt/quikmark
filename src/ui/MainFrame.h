@@ -105,6 +105,7 @@ private:
     void UpdateFromTabs();
     void UpdateChangeBanner();
     void StartParse(const TabSession& tab);
+    void InitializeFileWatcher();
     void WatchFile(const wxString& path);
     void UnwatchFile(const wxString& path);
     void OnParseCompleted(wxThreadEvent& event);
@@ -156,7 +157,7 @@ private:
     std::unique_ptr<WorkspaceStore> workspaceStore_;
     WorkspaceState workspace_;
     TabManager tabs_;
-    wxFileSystemWatcher fileWatcher_;
+    std::unique_ptr<wxFileSystemWatcher> fileWatcher_;
     wxTimer changeTimer_;
     std::map<wxString, int> watchedDirectories_;
     TabStrip* tabStrip_ = nullptr;

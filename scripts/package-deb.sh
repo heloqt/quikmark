@@ -66,6 +66,7 @@ work_dir="${project_root}/build/deb-package"
 package_name="litemark_${version}_amd64"
 stage="${work_dir}/${package_name}"
 desktop_source="${project_root}/packaging/debian/litemark.desktop"
+mime_source="${project_root}/packaging/debian/litemark.xml"
 license_source="${project_root}/LICENSE"
 usage_source="${project_root}/doc/12-使用说明.md"
 
@@ -75,7 +76,8 @@ mkdir -p \
     "${stage}/usr/bin" \
     "${stage}/usr/lib/litemark" \
     "${stage}/usr/share/applications" \
-    "${stage}/usr/share/doc/litemark"
+    "${stage}/usr/share/doc/litemark" \
+    "${stage}/usr/share/mime/packages"
 
 install -m 0755 "${exe}" "${stage}/usr/bin/litemark"
 for library_name in \
@@ -96,6 +98,8 @@ patchelf --set-rpath '$ORIGIN' \
 
 install -m 0644 "${desktop_source}" \
     "${stage}/usr/share/applications/litemark.desktop"
+install -m 0644 "${mime_source}" \
+    "${stage}/usr/share/mime/packages/litemark.xml"
 install -m 0644 "${license_source}" \
     "${stage}/usr/share/doc/litemark/copyright"
 install -m 0644 "${usage_source}" \
@@ -133,6 +137,7 @@ if [[ -z "${dependencies}" ]]; then
     echo "dpkg-shlibdeps did not produce dependencies." >&2
     exit 1
 fi
+dependencies="${dependencies}, xdg-utils, desktop-file-utils, shared-mime-info"
 
 installed_size="$(du -sk "${stage}" | awk '{print $1}')"
 cat > "${stage}/DEBIAN/control" <<EOF

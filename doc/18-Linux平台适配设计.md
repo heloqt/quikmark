@@ -4,10 +4,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 状态 | 基础平台拆分已实施；扩展功能待后续阶段 |
+| 状态 | 基础平台拆分、网络图片、文件监控和 XDG 文件关联已实施 |
 | 目标 | 增加原生 Linux 版本，保留现有 Windows 版本 |
 | 构建方式 | Linux 原生编译，不采用 MinGW-w64 交叉编译 |
-| 首轮发行 | 可运行目录/压缩包；后续再确定 `.deb` 与 AppImage |
+| 首轮发行 | Ubuntu 22.04 `.deb` 已验证；AppImage 后续评估 |
 | 单文件 | 不作为首轮必需项；需要时优先 AppImage |
 
 本设计与现有 [需求文档](./02-需求文档.md) 的 Windows 验收范围并行。Linux 正式纳入验收前，需要单独确认支持的发行版、最低图形环境、性能和发行包形态。
@@ -21,18 +21,17 @@
 - Linux 使用 XDG 用户目录、libcurl、Unix Domain Socket 和桌面文件，不访问注册表。
 - UI 中只保留少量真正的平台条件编译；应用层和核心层不直接包含 `platform/windows/` 路径。
 - 构建入口按平台选择源码，Windows 仍生成 GUI `WIN32` 可执行文件，Linux 生成普通 ELF 可执行文件。
-- 首轮 Linux 先完成功能可用和测试通过；AppImage、`.deb`、自动升级等功能后置。
+- Linux 已完成基础功能与首轮 `.deb` 验证；AppImage 和自动升级等后续。
 
 当前基础实施已在一台 CentOS 7.9 ECS 上完成验证：
 
 - GCC 11、CMake 3.31.6、wxWidgets 3.3.0 和 md4c 可以完成安装。
 - Windows 和 Linux 都能生成 Release 应用。
-- 两个平台的 14/14 个现有测试全部通过。
+- Linux 的 16/16 个现有测试全部通过，Windows 的 14/14 个测试通过。
 - Linux ELF 可在 Xvfb 中完成带 Markdown 文件的启动冒烟。
 - Linux 第二实例可以向已有实例转发路径并退出。
+- Linux 网络图片下载、XDG 文件关联和文件变化监控已实现并验证。
 - Windows Release 可正常启动，原有单元测试通过。
-
-本轮基础版本暂不包含 Linux 网络图片下载、文件格式关联和文件变化监控验收。Linux 当前会隐藏文件关联菜单，网络图片返回明确的“不支持”占位错误；本地图片继续可用。
 
 ## 2. 范围
 
@@ -433,16 +432,21 @@ ctest --test-dir build/linux-release --output-on-failure
 结果：
 
 - 原生 x86-64 ELF Release 构建通过。
-- 14/14 单元测试通过。
+- 16/16 单元测试通过。
 - Xvfb 中带 Markdown 文件完成启动冒烟。
 - 第二个进程成功转发路径后退出，第一个进程继续运行。
+- 网络图片下载覆盖 HTTP 成功、重定向、404 和非 HTTP 拒绝。
+- XDG 文件关联测试验证桌面文件、MIME 声明和默认应用设置。
+- 运行中修改 Markdown 文件后，`file_change_detected` 事件成功产生。
 - 运行时依赖 wxWidgets 3.3 共享库和 GTK3。
 
 ### 12.3 当前边界
 
-- Linux 网络图片下载返回明确的不支持错误，本地图片功能保留。
-- Linux 文件关联菜单隐藏，不写注册表或 XDG 关联。
-- 文件变化监控代码仍可编译，但本轮不纳入 Linux 验收。
+- Linux 网络图片使用 libcurl，支持 HTTP/HTTPS、重定向、超时、
+  64 MiB 限制和状态码检查。
+- Linux 文件关联写入用户级 XDG 桌面文件和 MIME 声明，并调用
+  `xdg-mime` 设置默认应用。
+- 文件变化监控在事件循环启动后延迟初始化，已验证可收到外部修改事件。
 - 未生成 Linux 单文件包。
 
 ### 12.4 Ubuntu 22.04 `.deb` 验证
@@ -450,7 +454,7 @@ ctest --test-dir build/linux-release --output-on-failure
 使用 Ubuntu 22.04.5 base rootfs 作为独立 chroot 构建和安装环境：
 
 - 在 Ubuntu 中重新编译 wxWidgets 3.3、md4c 和 liteMark。
-- 14/14 单元测试通过。
+- 16/16 单元测试通过。
 - 将 wxWidgets 的两个运行库放入 `/usr/lib/litemark`。
 - 主程序 RUNPATH 设置为 `$ORIGIN/../lib/litemark`，wx 库使用 `$ORIGIN`。
 - 依赖由 `dpkg-shlibdeps` 计算，覆盖 GTK3、X11、libpng、libtiff 等系统库。
@@ -465,10 +469,11 @@ ctest --test-dir build/linux-release --output-on-failure
 dist/litemark_1.0.0_amd64.deb
 ```
 
-结果为 3,966,574 字节，SHA256：
+结果为 3,994,362 字节，SHA256：
 
 ```text
-ac06b3b97709661c042a362aa1154a9b5646c94f888cb939cf2f6e258734b927
+546061e001c23eeff2124271c6972e01ebc7f4eb71c0f5523ac79c2b176f648a
 ```
 
-该包面向 Ubuntu 22.04 x86-64。桌面入口包含在包内，但 Markdown MIME 文件关联尚未启用。
+该包面向 Ubuntu 22.04 x86-64。包内包含 Markdown MIME 声明和桌面入口，
+应用菜单会通过 XDG 写入当前用户的默认关联。
