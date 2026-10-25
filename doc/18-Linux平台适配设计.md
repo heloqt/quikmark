@@ -443,4 +443,32 @@ ctest --test-dir build/linux-release --output-on-failure
 - Linux 网络图片下载返回明确的不支持错误，本地图片功能保留。
 - Linux 文件关联菜单隐藏，不写注册表或 XDG 关联。
 - 文件变化监控代码仍可编译，但本轮不纳入 Linux 验收。
-- 未生成 Linux 安装包或单文件包。
+- 未生成 Linux 单文件包。
+
+### 12.4 Ubuntu 22.04 `.deb` 验证
+
+使用 Ubuntu 22.04.5 base rootfs 作为独立 chroot 构建和安装环境：
+
+- 在 Ubuntu 中重新编译 wxWidgets 3.3、md4c 和 liteMark。
+- 14/14 单元测试通过。
+- 将 wxWidgets 的两个运行库放入 `/usr/lib/litemark`。
+- 主程序 RUNPATH 设置为 `$ORIGIN/../lib/litemark`，wx 库使用 `$ORIGIN`。
+- 依赖由 `dpkg-shlibdeps` 计算，覆盖 GTK3、X11、libpng、libtiff 等系统库。
+- `dpkg -i` 安装成功。
+- 暂时移走 `/opt/wxWidgets-3.3.0` 后，安装包仍能加载私有 wx 库并完成 Xvfb 启动冒烟。
+- `dpkg -r` 卸载成功，程序和私有库均被移除。
+- 在另一个全新的 Ubuntu 22.04 rootfs 中执行 `apt install ./litemark_1.0.0_amd64.deb`，依赖自动解析成功，Xvfb 启动通过，`apt purge litemark` 卸载通过。
+
+生成的包：
+
+```text
+dist/litemark_1.0.0_amd64.deb
+```
+
+结果为 3,966,574 字节，SHA256：
+
+```text
+ac06b3b97709661c042a362aa1154a9b5646c94f888cb939cf2f6e258734b927
+```
+
+该包面向 Ubuntu 22.04 x86-64。桌面入口包含在包内，但 Markdown MIME 文件关联尚未启用。
