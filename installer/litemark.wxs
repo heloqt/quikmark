@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="liteMark"
+    Manufacturer="liteMark"
+    Version="$(var.ProductVersion)"
+    Language="2052"
+    Codepage="65001"
+    UpgradeCode="E4F16B33-A6D1-44AE-8A96-E6C4A6AF5CA8"
+    Scope="perUser"
+    Compressed="yes"
+    InstallerVersion="500">
+
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="已安装更新版本的 liteMark。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon" SourceFile="$(var.AppIcon)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPCOMMENTS" Value="轻量、原生的只读 Markdown 阅读器" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <ui:WixUI Id="WixUI_FeatureTree" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="liteMark" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="liteMark" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="MainComponents">
+      <Component Id="MainFiles" Directory="INSTALLFOLDER"
+                 Guid="2EB6D388-5295-47DE-A570-9C5AE54FF118">
+        <File Id="MainExecutable"
+              Source="$(var.SourceExe)"
+              Name="liteMark.exe" />
+        <File Id="LicenseFile"
+              Source="$(var.LicenseFile)"
+              Name="LICENSE" />
+        <File Id="UsageFile"
+              Source="$(var.UsageFile)"
+              Name="使用说明.md" />
+        <RemoveFolder Id="RemoveInstallFolder"
+                      Directory="INSTALLFOLDER"
+                      On="uninstall" />
+        <RemoveFolder Id="RemoveProgramsFolder"
+                      Directory="ProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\liteMark"
+                       Name="Installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+
+      <Component Id="StartMenuShortcuts"
+                 Directory="ApplicationProgramsFolder"
+                 Guid="A3E3FEC8-1F11-45D3-8664-7F66D26FDCCD">
+        <Shortcut Id="StartMenuApp"
+                  Name="liteMark"
+                  Description="liteMark Markdown 阅读器"
+                  Target="[INSTALLFOLDER]liteMark.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon" />
+        <Shortcut Id="StartMenuUsage"
+                  Name="使用说明"
+                  Description="打开 liteMark 使用说明"
+                  Target="[INSTALLFOLDER]使用说明.md"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="StartMenuUninstall"
+                  Name="卸载 liteMark"
+                  Target="[SystemFolder]msiexec.exe"
+                  Arguments="/x [ProductCode]" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                      Directory="ApplicationProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\liteMark"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="MainFeature"
+             Title="liteMark 程序"
+             Description="安装 liteMark、许可证、使用说明和开始菜单快捷方式。"
+             Level="1"
+             AllowAbsent="no">
+      <ComponentGroupRef Id="MainComponents" />
+    </Feature>
+
+    <Feature Id="DesktopShortcutFeature"
+             Title="桌面快捷方式"
+             Description="在当前用户桌面创建 liteMark 快捷方式。"
+             Level="1"
+             AllowAbsent="yes">
+      <ComponentRef Id="DesktopShortcutComponent" />
+    </Feature>
+
+    <Feature Id="FileAssociationFeature"
+             Title="Markdown 文件关联"
+             Description="使用 liteMark 打开 .md 和 .markdown 文件。"
+             Level="1"
+             AllowAbsent="yes">
+      <ComponentRef Id="FileAssociationComponent" />
+    </Feature>
+
+    <Component Id="DesktopShortcutComponent"
+               Directory="DesktopFolder"
+               Guid="E36F8B79-C498-448C-B562-4B850D5CEE7F">
+      <Shortcut Id="DesktopAppShortcut"
+                Name="liteMark"
+                Description="liteMark Markdown 阅读器"
+                Target="[INSTALLFOLDER]liteMark.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\liteMark"
+                     Name="DesktopShortcut"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Component Id="FileAssociationComponent"
+               Directory="INSTALLFOLDER"
+               Guid="9FC01E4E-C9D9-4D33-8127-5C63B092CF35">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\.md"
+                     Type="string"
+                     Value="liteMark.Markdown" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\.markdown"
+                     Type="string"
+                     Value="liteMark.Markdown" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\liteMark.Markdown"
+                     Type="string"
+                     Value="Markdown Document" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\liteMark.Markdown\DefaultIcon"
+                     Type="string"
+                     Value="[INSTALLFOLDER]liteMark.exe,0" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\liteMark.Markdown\shell\open\command"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]liteMark.exe&quot; &quot;%1&quot;" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Applications\liteMark.exe"
+                     Name="FriendlyAppName"
+                     Type="string"
+                     Value="liteMark" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Applications\liteMark.exe\shell\open\command"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]liteMark.exe&quot; &quot;%1&quot;" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Applications\liteMark.exe\SupportedTypes"
+                     Name=".md"
+                     Type="string"
+                     Value="" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Applications\liteMark.exe\SupportedTypes"
+                     Name=".markdown"
+                     Type="string"
+                     Value="" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\liteMark"
+                     Name="FileAssociations"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>
