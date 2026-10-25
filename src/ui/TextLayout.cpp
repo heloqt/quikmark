@@ -1,6 +1,5 @@
 #include "ui/TextLayout.h"
-
-#include <wx/fontenum.h>
+#include "ui/FontCatalog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,19 +10,6 @@ namespace {
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
-}
-
-wxString ChooseFace(bool mono) {
-    if (mono) {
-        if (wxFontEnumerator::IsValidFacename("Cascadia Mono")) {
-            return "Cascadia Mono";
-        }
-        return "Consolas";
-    }
-    if (wxFontEnumerator::IsValidFacename("Microsoft YaHei UI")) {
-        return "Microsoft YaHei UI";
-    }
-    return "Segoe UI";
 }
 
 int BreakPosition(const wxString& text, int fit) {
@@ -65,7 +51,8 @@ int ScaledPointSize(int pointSize, double fontScale) {
 }
 
 wxFont BuildFont(const TextStyle& style) {
-    wxFont font(wxFontInfo(style.pointSize).FaceName(ChooseFace(style.mono)));
+    wxFont font(wxFontInfo(style.pointSize)
+                    .FaceName(style.mono ? MonoFaceName() : UiFaceName()));
     if (style.bold) {
         font.SetWeight(wxFONTWEIGHT_BOLD);
     }

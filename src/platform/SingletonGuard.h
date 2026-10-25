@@ -1,10 +1,12 @@
 #pragma once
 
+#include <memory>
+
 namespace litemark {
 
 class SingletonGuard {
 public:
-    explicit SingletonGuard(const wchar_t* name);
+    explicit SingletonGuard(const char* name);
     ~SingletonGuard();
 
     SingletonGuard(const SingletonGuard&) = delete;
@@ -13,7 +15,9 @@ public:
     bool IsPrimary() const { return primary_; }
 
 private:
-    void* mutex_ = nullptr;
+    struct Impl;
+
+    std::unique_ptr<Impl> impl_;
     bool primary_ = false;
 };
 

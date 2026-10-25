@@ -1,4 +1,4 @@
-#include "platform/windows/FileAssociation.h"
+#include "platform/FileAssociation.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -43,6 +43,10 @@ std::wstring ExecutablePath() {
 }  // namespace
 
 namespace litemark {
+
+bool IsFileAssociationSupported() {
+    return true;
+}
 
 bool RegisterLiteMarkFileAssociations(wxString* error) {
     const std::wstring executable = ExecutablePath();

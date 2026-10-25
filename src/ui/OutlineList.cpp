@@ -1,7 +1,11 @@
 #include "ui/OutlineList.h"
 
+#include "ui/FontCatalog.h"
+
 #include <wx/dc.h>
+#ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
+#endif
 #include <wx/settings.h>
 
 #include <algorithm>
@@ -11,8 +15,10 @@ namespace litemark {
 
 namespace {
 
+#ifdef __WXMSW__
 constexpr UINT kOutlineItemCountMessage = WM_APP + 701;
 constexpr UINT kOutlineTopRowMessage = WM_APP + 702;
+#endif
 
 }  // namespace
 
@@ -67,7 +73,7 @@ void OutlineList::OnDrawItem(wxDC& dc, const wxRect& rect,
     }
     const Item& item = items_[index];
     wxFont font(wxFontInfo(item.level <= 2 ? 10 : 9)
-                    .FaceName("Microsoft YaHei UI"));
+                    .FaceName(UiFaceName()));
     if (item.level <= 2) {
         font.SetWeight(wxFONTWEIGHT_BOLD);
     }

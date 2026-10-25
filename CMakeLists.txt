@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(liteMark VERSION 1.0.0 LANGUAGES CXX RC)
+project(liteMark VERSION 1.0.0 LANGUAGES CXX)
+
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,37 +20,53 @@ configure_file(
 
 option(LITEMARK_STATIC_WX "Link wxWidgets statically" OFF)
 
-if(LITEMARK_STATIC_WX)
+if(WIN32 AND LITEMARK_STATIC_WX)
     set(wxWidgets_USE_STATIC ON)
 endif()
 
+set(LITEMARK_MD4C_HINTS)
+if(WIN32)
+    list(APPEND LITEMARK_MD4C_HINTS "D:/msys64-33/ucrt64")
+endif()
+
 find_file(MD4C_STATIC_LIBRARY NAMES libmd4c.a
-    HINTS "D:/msys64-33/ucrt64"
+    HINTS ${LITEMARK_MD4C_HINTS}
     PATH_SUFFIXES lib
     REQUIRED)
 
 find_package(wxWidgets 3.3 CONFIG REQUIRED COMPONENTS core base)
+find_package(Threads REQUIRED)
+
+if(NOT TARGET wxWidgets::core AND TARGET wx::core)
+    add_library(wxWidgets::core INTERFACE IMPORTED)
+    set_property(TARGET wxWidgets::core PROPERTY
+        INTERFACE_LINK_LIBRARIES wx::core)
+endif()
+if(NOT TARGET wxWidgets::base AND TARGET wx::base)
+    add_library(wxWidgets::base INTERFACE IMPORTED)
+    set_property(TARGET wxWidgets::base PROPERTY
+        INTERFACE_LINK_LIBRARIES wx::base)
+endif()
 
 find_path(MD4C_INCLUDE_DIR NAMES md4c.h
-    HINTS "D:/msys64-33/ucrt64"
+    HINTS ${LITEMARK_MD4C_HINTS}
     PATH_SUFFIXES include
     REQUIRED)
 
 if(LITEMARK_STATIC_WX)
     find_file(MD4C_LIBRARY NAMES libmd4c.a
-        HINTS "D:/msys64-33/ucrt64"
+        HINTS ${LITEMARK_MD4C_HINTS}
         PATH_SUFFIXES lib
         REQUIRED)
 else()
     find_library(MD4C_LIBRARY NAMES md4c
-        HINTS "D:/msys64-33/ucrt64"
+        HINTS ${LITEMARK_MD4C_HINTS}
         PATH_SUFFIXES lib
         REQUIRED)
 endif()
 
-add_executable(litemark WIN32
+set(LITEMARK_SOURCES
     src/app/Application.cpp
-    src/app/litemark.rc
     src/app/main.cpp
     src/core/flow/Flowchart.cpp
     src/core/document/DocumentNavigation.cpp
@@ -54,15 +74,12 @@ add_executable(litemark WIN32
     src/core/document/DocumentText.cpp
     src/core/parser/MarkdownPrefix.cpp
     src/core/parser/MarkdownParser.cpp
-    src/platform/windows/FileAssociation.cpp
-    src/platform/windows/ImageDownloader.cpp
-    src/platform/windows/IpcServer.cpp
-    src/platform/windows/PerformanceTrace.cpp
-    src/platform/windows/SingletonGuard.cpp
+    src/platform/PerformanceTraceCommon.cpp
     src/session/TabManager.cpp
     src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
     src/ui/DocumentMediaRenderer.cpp
+    src/ui/FontCatalog.cpp
     src/ui/MainFrame.cpp
     src/ui/OutlineList.cpp
     src/ui/OutlineToggleButton.cpp
@@ -72,6 +89,29 @@ add_executable(litemark WIN32
     src/ui/ThemeController.cpp
 )
 
+if(WIN32)
+    list(APPEND LITEMARK_SOURCES
+        src/app/litemark.rc
+        src/platform/windows/FileAssociation.cpp
+        src/platform/windows/ImageDownloader.cpp
+        src/platform/windows/IpcServer.cpp
+        src/platform/windows/PerformanceTrace.cpp
+        src/platform/windows/SingletonGuard.cpp
+    )
+    add_executable(litemark WIN32 ${LITEMARK_SOURCES})
+elseif(UNIX AND NOT APPLE)
+    list(APPEND LITEMARK_SOURCES
+        src/platform/linux/FileAssociation.cpp
+        src/platform/linux/ImageDownloader.cpp
+        src/platform/linux/IpcServer.cpp
+        src/platform/linux/PerformanceTrace.cpp
+        src/platform/linux/SingletonGuard.cpp
+    )
+    add_executable(litemark ${LITEMARK_SOURCES})
+else()
+    message(FATAL_ERROR "liteMark currently supports Windows and Linux only")
+endif()
+
 target_include_directories(litemark PRIVATE
     src
     ${LITEMARK_GENERATED_DIR}
@@ -80,6 +120,7 @@ target_include_directories(litemark PRIVATE
 target_link_libraries(litemark PRIVATE
     wxWidgets::core
     wxWidgets::base
+    Threads::Threads
     ${MD4C_LIBRARY}
 )
 
@@ -98,7 +139,7 @@ if(MINGW)
     target_link_options(litemark PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
-if(LITEMARK_STATIC_WX)
+if(WIN32 AND LITEMARK_STATIC_WX)
     target_link_options(litemark PRIVATE -static)
 endif()
 

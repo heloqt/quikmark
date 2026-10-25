@@ -4,6 +4,7 @@
 
 namespace litemark {
 
-bool RegisterLiteMarkFileAssociations(wxString* error = nullptr);
+wxString UiFaceName();
+wxString MonoFaceName();
 
 }  // namespace litemark

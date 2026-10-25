@@ -3,9 +3,10 @@
 #include "litemark/Version.h"
 #include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
-#include "platform/windows/PerformanceTrace.h"
-#include "platform/windows/FileAssociation.h"
+#include "platform/FileAssociation.h"
+#include "platform/PerformanceTrace.h"
 #include "ui/DocumentView.h"
+#include "ui/FontCatalog.h"
 #include "ui/OutlineList.h"
 #include "ui/OutlineToggleButton.h"
 #include "ui/TabStrip.h"
@@ -402,8 +403,11 @@ void MainFrame::CreateMenuBar() {
     recentMenu_ = new wxMenu();
     fileMenu->AppendSubMenu(recentMenu_, U8("最近打开"));
     fileMenu->Append(ID_RELOAD, U8("重新加载\tCtrl+R"));
-    fileMenu->AppendSeparator();
-    fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION, U8("注册文件关联..."));
+    if (IsFileAssociationSupported()) {
+        fileMenu->AppendSeparator();
+        fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION,
+                         U8("注册文件关联..."));
+    }
     fileMenu->AppendSeparator();
     fileMenu->Append(wxID_EXIT, U8("退出"));
 
@@ -719,7 +723,7 @@ void MainFrame::CreateOutlinePanel() {
 
     outlineTitle_ =
         new wxStaticText(outlineContentPanel_, wxID_ANY, U8("目录"));
-    wxFont titleFont(wxFontInfo(11).FaceName("Microsoft YaHei UI"));
+    wxFont titleFont(wxFontInfo(11).FaceName(UiFaceName()));
     titleFont.SetWeight(wxFONTWEIGHT_BOLD);
     outlineTitle_->SetFont(titleFont);
 

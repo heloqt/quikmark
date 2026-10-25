@@ -1,5 +1,7 @@
 #include "ui/TabStrip.h"
 
+#include "ui/FontCatalog.h"
+
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
 #include <wx/font.h>
@@ -83,7 +85,7 @@ void TabStrip::RebuildGeometry() {
     }
 
     wxClientDC dc(this);
-    wxFont normalFont(wxFontInfo(10).FaceName("Microsoft YaHei UI"));
+    wxFont normalFont(wxFontInfo(10).FaceName(UiFaceName()));
     wxFont selectedFont = normalFont;
     selectedFont.SetWeight(wxFONTWEIGHT_BOLD);
 

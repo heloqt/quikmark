@@ -1,4 +1,4 @@
-#include "platform/windows/ImageDownloader.h"
+#include "platform/ImageDownloader.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

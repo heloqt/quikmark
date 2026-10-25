@@ -1,4 +1,4 @@
-#include "platform/windows/IpcServer.h"
+#include "platform/IpcServer.h"
 
 #include <wx/arrstr.h>
 

@@ -1,7 +1,9 @@
 #include "ui/OutlineToggleButton.h"
 
 #include <wx/dcbuffer.h>
+#ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
+#endif
 
 namespace litemark {
 

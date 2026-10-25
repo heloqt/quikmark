@@ -1,19 +1,35 @@
-#include "platform/windows/SingletonGuard.h"
+#include "platform/SingletonGuard.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <string>
+
 namespace litemark {
 
-SingletonGuard::SingletonGuard(const wchar_t* name) {
-    mutex_ = CreateMutexW(nullptr, FALSE, name);
-    primary_ = mutex_ != nullptr && GetLastError() != ERROR_ALREADY_EXISTS;
+struct SingletonGuard::Impl {
+    void* mutex = nullptr;
+};
+
+SingletonGuard::SingletonGuard(const char* name) {
+    std::wstring wideName(L"Local\\");
+    if (name != nullptr) {
+        while (*name != '\0') {
+            wideName.push_back(
+                static_cast<wchar_t>(static_cast<unsigned char>(*name++)));
+        }
+    }
+    impl_ = std::make_unique<Impl>();
+    impl_->mutex = CreateMutexW(
+        nullptr, FALSE, wideName.empty() ? nullptr : wideName.c_str());
+    primary_ =
+        impl_->mutex != nullptr && GetLastError() != ERROR_ALREADY_EXISTS;
 }
 
 SingletonGuard::~SingletonGuard() {
-    if (mutex_ != nullptr) {
-        CloseHandle(static_cast<HANDLE>(mutex_));
-        mutex_ = nullptr;
+    if (impl_ != nullptr && impl_->mutex != nullptr) {
+        CloseHandle(static_cast<HANDLE>(impl_->mutex));
+        impl_->mutex = nullptr;
     }
 }
 

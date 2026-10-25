@@ -4,7 +4,7 @@
 #include "core/document/DocumentText.h"
 #include "core/layout/ListLayout.h"
 #include "core/policy/ResourcePolicy.h"
-#include "platform/windows/PerformanceTrace.h"
+#include "platform/PerformanceTrace.h"
 #include "ui/BlockLayout.h"
 #include "ui/DocumentMediaRenderer.h"
 #include "ui/PendingScroll.h"
@@ -22,7 +22,9 @@
 #include <wx/filename.h>
 #include <wx/font.h>
 #include <wx/msgdlg.h>
+#ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
+#endif
 #include <wx/utils.h>
 
 #include <algorithm>
@@ -69,8 +71,10 @@ constexpr double kMinFontScale = 0.75;
 constexpr double kMaxFontScale = 2.00;
 constexpr int kImageLoadedEventId = wxID_HIGHEST + 501;
 constexpr int kFlowchartLoadedEventId = wxID_HIGHEST + 502;
+#ifdef __WXMSW__
 constexpr UINT kMediaImageCountMessage = WM_APP + 711;
 constexpr UINT kMediaFlowchartCountMessage = WM_APP + 712;
+#endif
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);

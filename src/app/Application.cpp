@@ -1,8 +1,8 @@
 #include "app/Application.h"
 
-#include "platform/windows/IpcServer.h"
-#include "platform/windows/PerformanceTrace.h"
-#include "platform/windows/SingletonGuard.h"
+#include "platform/IpcServer.h"
+#include "platform/PerformanceTrace.h"
+#include "platform/SingletonGuard.h"
 #include "ui/MainFrame.h"
 #include "ui/ThemeController.h"
 
@@ -42,7 +42,7 @@ bool Application::OnInit() {
     }
 
     singleton_ = std::make_unique<SingletonGuard>(
-        L"Local\\liteMark.SingleInstance.Mutex");
+        "liteMark.SingleInstance.Mutex");
     if (!singleton_->IsPrimary()) {
         if (!SendOpenRequestToPrimary(paths)) {
             wxMessageBox(wxString::FromUTF8(

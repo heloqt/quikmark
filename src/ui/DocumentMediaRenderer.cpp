@@ -1,7 +1,7 @@
 #include "ui/DocumentMediaRenderer.h"
 
 #include "core/policy/ResourcePolicy.h"
-#include "platform/windows/ImageDownloader.h"
+#include "platform/ImageDownloader.h"
 #include "ui/TextLayout.h"
 
 #include <wx/event.h>

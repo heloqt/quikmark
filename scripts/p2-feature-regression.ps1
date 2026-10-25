@@ -140,15 +140,20 @@ function Save-WindowScreenshot([IntPtr]$Window, [string]$Path) {
     }
 }
 
-function Count-ColorPixels([string]$Path, [System.Drawing.Color]$Color) {
+function Count-ColorPixels(
+    [string]$Path,
+    [System.Drawing.Color]$Color,
+    [int]$Tolerance = 0
+) {
     $bitmap = [System.Drawing.Bitmap]::new($Path)
     $count = 0
     try {
         for ($y = 0; $y -lt $bitmap.Height; $y += 2) {
             for ($x = 0; $x -lt $bitmap.Width; $x += 2) {
                 $pixel = $bitmap.GetPixel($x, $y)
-                if ($pixel.R -eq $Color.R -and $pixel.G -eq $Color.G -and
-                    $pixel.B -eq $Color.B) {
+                if ([Math]::Abs($pixel.R - $Color.R) -le $Tolerance -and
+                    [Math]::Abs($pixel.G - $Color.G) -le $Tolerance -and
+                    [Math]::Abs($pixel.B - $Color.B) -le $Tolerance) {
                     ++$count
                 }
             }
@@ -433,7 +438,7 @@ try {
     if (Save-WindowScreenshot `
             $selectionProcess.MainWindowHandle $searchScreenshot) {
         $searchPixels = Count-ColorPixels $searchScreenshot `
-            ([System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x66))
+            ([System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x66)) 64
         if ($searchPixels -lt 20) {
             $texts = Get-VisibleWindowTexts $selectionProcess.MainWindowHandle
             throw "Active search match highlight was not visible. Texts: $($texts -join ' | ')"
