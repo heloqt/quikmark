@@ -14,24 +14,33 @@ does not provide editing or saving.
 
 Current version: **1.1.0**
 
+The application interface and bundled usage guide are currently in Simplified
+Chinese. English UI localization is planned for a future release.
+
 ## Download
 
-QuikMark 1.1.0 is available from
-[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0):
+Project home:
+[Gitee](https://gitee.com/heloqt/quikmark) |
+[GitHub](https://github.com/heloqt/quikmark)
 
-| Platform | Package | Size |
-| --- | --- | --- |
-| Windows 10/11 x64 | [quikmark-1.1.0-setup.exe](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) | 4.15 MiB |
-| Windows 10/11 x64 | [quikmark-1.1.0-x64.msi](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) | 4.34 MiB |
-| Ubuntu 22.04+ x64 | [quikmark_1.1.0_amd64.deb](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) | 3.88 MiB |
-| Linux x86-64 | [QuikMark-1.1.0-x86_64.AppImage](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) | 35.95 MiB |
+Releases:
+[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.1.0)
 
-SHA256 checksums for all release packages are available in
-[SHA256-1.1.0.txt](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt).
+| Platform | Package | Size | Download |
+| --- | --- | --- | --- |
+| Windows 10/11 x64 | `quikmark-1.1.0-setup.exe` | 4.15 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.1.0-x64.msi` | 4.34 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.1.0_amd64.deb` | 3.88 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.1.0-x86_64.AppImage` | 35.95 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) |
+
+SHA256 checksums:
+[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)
 
 ## Features
 
-- Native single-window, multi-tab readers for Windows and Linux. Read-only,
+- Native single-window, multi-tab reader for Windows and Linux. Read-only,
   with no editing or saving support.
 - Open files from the File menu, drag and drop, Explorer or Linux desktop file
   associations, and path forwarding to an existing single-instance window.
@@ -53,7 +62,7 @@ SHA256 checksums for all release packages are available in
 - Shortcuts: `Ctrl+O` open, `Ctrl+R` reload, `Ctrl+F` find, `Ctrl+W` close tab,
   `Ctrl+Tab` / `Ctrl+Shift+Tab` switch tabs, `Ctrl+A` / `Ctrl+C` select all and
   copy, and `F1` for help.
-- Three-state outline (hidden, pinned, or collapsed), fixed width, a splitter
+- Three-state outline (hidden, expanded, or collapsed), fixed width, a splitter
   handle, heading anchors, and up to five recent documents.
 - Restores window position, tab order, active tab, reading position, outline
   state, theme, and recent documents.
@@ -85,12 +94,12 @@ For detailed usage, see the [usage guide (Chinese)](doc/12-使用说明.md).
 
 ### Linux
 
-- The `.deb` package targets Ubuntu 22.04 x86-64 and compatible newer
-  distributions:
+The `.deb` package targets Ubuntu 22.04 x86-64 and compatible newer
+distributions:
 
-  ```bash
-  sudo apt install ./quikmark_1.1.0_amd64.deb
-  ```
+```bash
+sudo apt install ./quikmark_1.1.0_amd64.deb
+```
 
 - After installation, the executable is `quikmark`, and the usage guide is at
   `/usr/share/quikmark/使用说明.md`.

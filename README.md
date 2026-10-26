@@ -11,18 +11,21 @@ QuikMark 是一个原生、轻量的 Markdown 阅读器。快速打开，专注�
 
 ## 下载
 
-QuikMark 1.1.0 已发布到
-[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0)：
+项目主页：[Gitee](https://gitee.com/heloqt/quikmark) |
+[GitHub](https://github.com/heloqt/quikmark)
 
-| 平台 | 安装包 | 大小 |
-| --- | --- | --- |
-| Windows 10/11 x64 | [quikmark-1.1.0-setup.exe](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) | 4.15 MiB |
-| Windows 10/11 x64 | [quikmark-1.1.0-x64.msi](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) | 4.34 MiB |
-| Ubuntu 22.04+ x64 | [quikmark_1.1.0_amd64.deb](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) | 3.88 MiB |
-| Linux x86-64 | [QuikMark-1.1.0-x86_64.AppImage](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) | 35.95 MiB |
+发布页面：[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.1.0)
 
-全部文件的 SHA256 校验值见
-[SHA256-1.1.0.txt](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)。
+| 平台 | 安装包 | 大小 | 下载 |
+| --- | --- | --- | --- |
+| Windows 10/11 x64 | `quikmark-1.1.0-setup.exe` | 4.15 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.1.0-x64.msi` | 4.34 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.1.0_amd64.deb` | 3.88 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.1.0-x86_64.AppImage` | 35.95 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) |
+
+SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)
 
 ## 功能
 
