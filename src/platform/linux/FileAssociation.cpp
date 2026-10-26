@@ -35,6 +35,14 @@ wxString DataHome() {
     return path.GetPath();
 }
 
+wxString DesktopExecutablePath() {
+    wxString appImagePath;
+    if (wxGetEnv("APPIMAGE", &appImagePath) && !appImagePath.empty()) {
+        return appImagePath;
+    }
+    return wxStandardPaths::Get().GetExecutablePath();
+}
+
 wxString EscapeDesktopExecArg(wxString value) {
     value.Replace("\\", "\\\\");
     value.Replace("\"", "\\\"");
@@ -115,8 +123,7 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
         return false;
     }
 
-    const wxString executable =
-        wxStandardPaths::Get().GetExecutablePath();
+    const wxString executable = DesktopExecutablePath();
     const wxString desktop =
         "[Desktop Entry]\n"
         "Type=Application\n"

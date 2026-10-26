@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=liteMark
+Comment=Lightweight native Markdown reader
+Exec=litemark %F
+Icon=litemark
+Terminal=false
+Categories=Office;Viewer;
+MimeType=text/markdown;
+StartupNotify=true
+StartupWMClass=liteMark

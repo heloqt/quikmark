@@ -15,7 +15,10 @@ liteMark 是一个原生、轻量、只读的 Markdown 阅读器，不依赖 Chr
 - [Gitee Releases 下载页](https://gitee.com/heloqt/litemark/releases)
 - [直接下载 liteMark 1.0.0 安装包](https://gitee.com/heloqt/litemark/releases/download/v1.0.0/liteMark-1.0.0-setup.exe)
 
+适用于 Ubuntu 22.04 及更新版本的 x86_64 桌面：
 
+- `litemark_1.0.0_amd64.deb`：系统集成和卸载流程更完整。
+- `liteMark-1.0.0-x86_64.AppImage`：单文件运行，不需要安装。
 
 SHA256（`liteMark-1.0.0-setup.exe`）：
 
@@ -25,9 +28,16 @@ SHA256（`liteMark-1.0.0-setup.exe`）：
 F296183CF1C51792BE4A0E5F4D2FDBCEC17F47ECA9E877A36DE07C9AB7BE7450
 ```
 
+Linux 包 SHA256：
+
+```text
+546061e001c23eeff2124271c6972e01ebc7f4eb71c0f5523ac79c2b176f648a  litemark_1.0.0_amd64.deb
+e8697c61563a27074a2a761f095870000563188bdceb19eaebd9af5a4c27d242  liteMark-1.0.0-x86_64.AppImage
+```
+
 ## 功能
 
-- Windows 原生单窗口多 Tab 阅读器，只读，不提供编辑和保存功能。
+- Windows 和 Linux 原生单窗口多 Tab 阅读器，只读，不提供编辑和保存功能。
 - 支持文件菜单打开、拖入、资源管理器文件关联和第二实例路径转发。
 - 读取 UTF-8 / UTF-8 BOM 文件，单个文档最大 64 MiB。
 - 支持 Markdown 标题、段落、强调、删除线、列表、任务列表、引用、代码块、链接、水平线、表格和图片。
@@ -48,11 +58,20 @@ F296183CF1C51792BE4A0E5F4D2FDBCEC17F47ECA9E877A36DE07C9AB7BE7450
 
 ## 安装与卸载
 
+Windows：
+
 - 默认安装到当前用户目录：`%LOCALAPPDATA%\Programs\liteMark`，无需管理员权限。
 - 开始菜单快捷方式始终创建；桌面快捷方式和 Markdown 文件关联可在安装组件页取消。
 - 卸载时恢复安装前的 Markdown 文件关联。
 - 安装目录包含 `使用说明.md`，开始菜单提供使用说明入口。
 - 完成页的“运行 liteMark”默认不勾选。
+
+Linux：
+
+- `.deb` 可使用 `sudo apt install ./litemark_1.0.0_amd64.deb` 安装，并会部署桌面入口和 Markdown MIME 声明。
+- AppImage 执行 `chmod +x liteMark-1.0.0-x86_64.AppImage` 后直接运行。
+- 没有 FUSE 2 的发行版可设置 `APPIMAGE_EXTRACT_AND_RUN=1` 后运行 AppImage。
+- AppImage 不会自动抢占 Markdown 默认打开方式；需要时在“文件 > 注册文件关联...”中启用。
 
 ## 构建
 
@@ -117,6 +136,18 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 版本从 `CMakeLists.txt` 的 `project(... VERSION ...)` 自动读取，安装器输出到 `dist\`。安装包超过 10 MB 时打包失败。
+
+生成 Linux AppImage：
+
+```bash
+bash scripts/setup-appimage-tools.sh
+bash scripts/package-appimage.sh \
+  --exe build/linux-release/bin/litemark \
+  --wx-lib-dir /opt/wxWidgets-3.3.0/lib
+```
+
+AppImage 会打包 wxWidgets、libcurl、GTK3、GDK-Pixbuf、图标、MIME 声明和使用说明。
+当前产物面向 Ubuntu 22.04 x86_64 及兼容的新发行版。
 
 生成无需开发环境的性能测试包：
 

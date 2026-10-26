@@ -33,6 +33,8 @@ int main() {
 
     wxString oldDataHome;
     const bool hadDataHome = wxGetEnv("XDG_DATA_HOME", &oldDataHome);
+    wxString oldAppImage;
+    const bool hadAppImage = wxGetEnv("APPIMAGE", &oldAppImage);
     wxFileName directory(wxFileName::GetTempDir(), wxString());
     directory.AppendDir(
         wxString::Format("litemark-association-%ld",
@@ -43,6 +45,9 @@ int main() {
     }
     const wxString root = directory.GetPath();
     wxSetEnv("XDG_DATA_HOME", root);
+    const wxString appImage =
+        wxFileName(root, "liteMark test.AppImage").GetFullPath();
+    wxSetEnv("APPIMAGE", appImage);
 
     bool passed = false;
     do {
@@ -77,6 +82,9 @@ int main() {
                    "MIME file could not be read") ||
             !Check(Contains(desktopText, "MimeType=text/markdown;"),
                    "desktop file lacks Markdown MIME type") ||
+            !Check(Contains(desktopText,
+                            "Exec=\"" + appImage + "\" %F"),
+                   "desktop file does not point at the AppImage") ||
             !Check(Contains(mimeText, "*.markdown"),
                    "MIME file lacks Markdown glob")) {
             break;
@@ -100,6 +108,11 @@ int main() {
         wxSetEnv("XDG_DATA_HOME", oldDataHome);
     } else {
         wxUnsetEnv("XDG_DATA_HOME");
+    }
+    if (hadAppImage) {
+        wxSetEnv("APPIMAGE", oldAppImage);
+    } else {
+        wxUnsetEnv("APPIMAGE");
     }
     wxFileName::Rmdir(root, wxPATH_RMDIR_RECURSIVE);
     if (!passed) {

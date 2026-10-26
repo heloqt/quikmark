@@ -7,8 +7,8 @@
 | 状态 | 基础平台拆分、网络图片、文件监控和 XDG 文件关联已实施 |
 | 目标 | 增加原生 Linux 版本，保留现有 Windows 版本 |
 | 构建方式 | Linux 原生编译，不采用 MinGW-w64 交叉编译 |
-| 首轮发行 | Ubuntu 22.04 `.deb` 已验证；AppImage 后续评估 |
-| 单文件 | 不作为首轮必需项；需要时优先 AppImage |
+| 首轮发行 | Ubuntu 22.04 `.deb` 和 x86_64 AppImage 已验证 |
+| 单文件 | 提供 AppImage；`.deb` 仍作为桌面集成更完整的安装方式 |
 
 本设计与现有 [需求文档](./02-需求文档.md) 的 Windows 验收范围并行。Linux 正式纳入验收前，需要单独确认支持的发行版、最低图形环境、性能和发行包形态。
 
@@ -21,7 +21,7 @@
 - Linux 使用 XDG 用户目录、libcurl、Unix Domain Socket 和桌面文件，不访问注册表。
 - UI 中只保留少量真正的平台条件编译；应用层和核心层不直接包含 `platform/windows/` 路径。
 - 构建入口按平台选择源码，Windows 仍生成 GUI `WIN32` 可执行文件，Linux 生成普通 ELF 可执行文件。
-- Linux 已完成基础功能与首轮 `.deb` 验证；AppImage 和自动升级等后续。
+- Linux 已完成基础功能、`.deb` 和 AppImage 验证；自动升级等后续。
 
 当前基础实施已在一台 CentOS 7.9 ECS 上完成验证：
 
@@ -316,24 +316,25 @@ Linux 遵循 XDG：
 |---|---|---|---|
 | 目录/`.tar.gz` | 最简单，开发验证快 | 无桌面集成，需要手动解压 | 首轮测试产物 |
 | `.deb` | 依赖、桌面文件、卸载流程清晰 | 首版只覆盖 Debian/Ubuntu 系 | Linux 正式主推 |
-| AppImage | 单文件、可移动、用户无需安装 | 包体为几十 MB；文件关联需额外集成；部分环境依赖 FUSE | 有明确单文件需求时提供 |
+| AppImage | 单文件、可移动、用户无需安装 | 包体为几十 MB；文件关联需额外集成；部分环境依赖 FUSE | 已提供 |
 | Flatpak | 沙箱和桌面集成完善 | 体积、运行环境和打包成本最高 | 暂不考虑 |
 | 全静态 ELF | 表面简单 | GTK3/wxWidgets 静态链接复杂且不稳定 | 不采用 |
 
 ### 8.2 建议
 
-Linux 首版不把单文件设为验收条件。先交付：
+Linux 首批同时交付：
 
 1. 可直接运行的构建目录。
 2. 依赖明确、可复现的 `.tar.gz`。
-3. 功能稳定后增加 `.deb`，由包安装桌面文件和 MIME 类型。
+3. `.deb`：由包安装桌面文件和 MIME 类型，适合长期使用。
+4. AppImage：适合直接下载运行，不修改系统安装目录。
 
-如果后续确实需要“下载一个文件即可运行”，优先制作 AppImage：
+AppImage 的具体约束：
 
 - 在较老 glibc 环境构建，提高兼容性。
 - 打包 wxWidgets、libcurl 和必要的 GTK 运行库。
 - 不承诺静态 GTK。
-- 首次运行时提供“安装到应用菜单/关联 Markdown”选项。
+- 文件关联使用 AppImage 的原始路径，而不是解包后的临时路径。
 - Linux AppImage 的包体目标单独制定，不沿用 Windows `<10 MB` 门槛。
 
 ## 9. 测试与验收
@@ -373,7 +374,7 @@ Linux 首版不把单文件设为验收条件。先交付：
 | L2 | Linux 根目录构建和功能回归 | 可打开、切换、滚动、搜索和显示图片 |
 | L3 | 文件监听、主题、字体和状态路径收口 | 日常 Linux 使用闭环 |
 | L4 | `.tar.gz` 和可选 `.deb` | 可交付安装/运行包 |
-| L5 | AppImage 评估 | 明确体积、桌面集成和兼容性后再决定 |
+| L5 | AppImage 打包 | 单文件可启动，GTK/wxWidgets/libcurl 已打包，文件关联可用 |
 
 粗略工作量预计为 5–10 个开发日，主要不确定性在 GTK3 下的主题、字体和 UI 回归，而不是解析与布局核心。
 
@@ -383,7 +384,7 @@ Linux 首版不把单文件设为验收条件。先交付：
 |---|---|---|
 | LNX-001 | 首批支持发行版 | Ubuntu 22.04/24.04、Debian 12 x86_64 |
 | LNX-002 | 发行形态 | 首轮目录/压缩包，后续 `.deb` |
-| LNX-003 | 单文件要求 | 不设为首轮门槛；需要时采用 AppImage |
+| LNX-003 | 单文件要求 | 同时提供 `.deb` 和 AppImage |
 | LNX-004 | Linux 性能门槛 | 先基线测量，再参考 Windows 指标单独确认 |
 | LNX-005 | 自动创建文件关联 | 安装包创建；便携版由用户通过菜单启用 |
 
@@ -445,9 +446,10 @@ ctest --test-dir build/linux-release --output-on-failure
 - Linux 网络图片使用 libcurl，支持 HTTP/HTTPS、重定向、超时、
   64 MiB 限制和状态码检查。
 - Linux 文件关联写入用户级 XDG 桌面文件和 MIME 声明，并调用
-  `xdg-mime` 设置默认应用。
+  `xdg-mime` 设置默认应用；AppImage 环境优先使用 `$APPIMAGE` 指向的原始文件。
 - 文件变化监控在事件循环启动后延迟初始化，已验证可收到外部修改事件。
-- 未生成 Linux 单文件包。
+- AppImage 使用 `.deb` 相同的应用代码，并额外打包 GTK3、GDK-Pixbuf、
+  wxWidgets、libcurl 和桌面图标。
 
 ### 12.4 Ubuntu 22.04 `.deb` 验证
 
@@ -477,3 +479,50 @@ dist/litemark_1.0.0_amd64.deb
 
 该包面向 Ubuntu 22.04 x86-64。包内包含 Markdown MIME 声明和桌面入口，
 应用菜单会通过 XDG 写入当前用户的默认关联。
+
+### 12.5 Ubuntu 22.04 AppImage 验证
+
+AppImage 在 Ubuntu 22.04.5 chroot 中构建：
+
+```bash
+bash scripts/setup-appimage-tools.sh
+bash scripts/package-appimage.sh \
+  --exe build/linux-release/bin/litemark \
+  --wx-lib-dir /opt/wxWidgets-3.3.0/lib
+```
+
+构建脚本使用固定版本并校验 SHA256 的 linuxdeploy、appimagetool、
+type-2 runtime 和 GTK 插件。linuxdeploy 负责收集并修正动态库 RUNPATH，
+AppDir 同时包含：
+
+- `usr/bin/litemark`
+- wxWidgets、libcurl、GTK3 和 GDK-Pixbuf
+- `.desktop`、SVG 图标和 Markdown MIME 声明
+- 项目许可证和使用说明
+
+验证结果：
+
+- Linux Release 重新编译成功，16/16 单元测试通过。
+- AppImage 内置 Xvfb 启动冒烟通过。
+- 复制到独立 Ubuntu 22.04 rootfs 后，在不设置 `LD_LIBRARY_PATH` 的
+  环境中成功打开 Markdown 文件。
+- `LD_DEBUG` 确认 GTK3 实际从 AppImage 解包目录的 `usr/lib` 加载，
+  没有借用构建机的 `/opt` 运行库。
+- 无 FUSE 2 时支持 runtime 自带的
+  `APPIMAGE_EXTRACT_AND_RUN=1` 运行方式。
+
+生成的包：
+
+```text
+dist/liteMark-1.0.0-x86_64.AppImage
+```
+
+产物为 37,607,928 字节，SHA256：
+
+```text
+e8697c61563a27074a2a761f095870000563188bdceb19eaebd9af5a4c27d242
+```
+
+AppImage 包含 GTK 运行库，因此包体明显大于 Windows 安装器；该体积不套用
+Windows `<10 MB` 限制。当前二进制使用 Ubuntu 22.04 的 glibc 构建，面向
+Ubuntu 22.04 x86_64 及兼容的新发行版。
