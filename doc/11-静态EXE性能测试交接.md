@@ -4,7 +4,7 @@
 
 接收方只需要获得：
 
-- 一个静态 `liteMark.exe`。
+- 一个静态 `quikmark.exe`。
 - 对应的性能测试脚本包。
 - 一台 Windows 10/11 x64 测试机。
 
@@ -17,21 +17,21 @@
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\create-perf-kit.ps1 `
-  -Exe .\build\mingw-release-static\bin\liteMark.exe `
-  -OutputDirectory .\dist\liteMark-perf-kit-20261022 `
+  -Exe .\build\mingw-release-static\bin\quikmark.exe `
+  -OutputDirectory .\dist\quikmark-perf-kit-20261022 `
   -Zip
 ```
 
 生成：
 
 ```text
-dist\liteMark-perf-kit-20261022.zip
+dist\quikmark-perf-kit-20261022.zip
 ```
 
 包内包含：
 
 ```text
-liteMark.exe
+quikmark.exe
 SHA256SUMS.txt
 README.md
 run-benchmark.ps1
@@ -50,13 +50,13 @@ scripts\continuous-scroll-benchmark.ps1
 2. 校验 SHA256：
 
 ```powershell
-Get-FileHash .\liteMark.exe -Algorithm SHA256
+Get-FileHash .\quikmark.exe -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 3. 连接交流电源，关闭浏览器、游戏、编译任务和同步盘。
 4. Windows 电源模式设为“平衡”，显示缩放设为 100%。
-5. 启动一次 `liteMark.exe` 再关闭，完成首次杀毒扫描和字体缓存预热。
+5. 启动一次 `quikmark.exe` 再关闭，完成首次杀毒扫描和字体缓存预热。
 6. 运行正式测试：
 
 ```powershell

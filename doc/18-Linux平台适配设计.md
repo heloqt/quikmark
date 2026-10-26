@@ -108,7 +108,7 @@ platform implementations -> OS SDK / libcurl / XDG tools
 顶层工程只声明 C++：
 
 ```cmake
-project(liteMark VERSION 1.0.0 LANGUAGES CXX)
+project(QuikMark VERSION 1.1.0 LANGUAGES CXX)
 find_package(Threads REQUIRED)
 ```
 
@@ -203,12 +203,13 @@ Windows 映射现有实现：
 
 Linux 推荐使用**抽象 Unix Domain Socket**：
 
-- 名称类似 `@litemark-<uid>`。
+- 名称类似 `@quikmark-<uid>`。
 - 第一个进程绑定成功即为主实例。
 - 第二个进程连接失败后再尝试普通连接；能连接则发送路径并退出。
 - socket 位于抽象命名空间，进程退出后不会留下陈旧文件。
 - 服务端通过 `SO_PEERCRED` 校验客户端 UID，拒绝其他用户连接。
-- 若目标桌面环境不支持抽象 socket，可回退到 `$XDG_RUNTIME_DIR/litemark-$UID.sock`，目录和 socket 权限均为当前用户。
+- 若目标桌面环境不支持抽象 socket，可回退到
+  `$XDG_RUNTIME_DIR/quikmark-$UID.sock`，目录和 socket 权限均为当前用户。
 
 路径协议应改为长度前缀的 UTF-8 消息，不再使用换行分隔，避免文件名中的换行符产生歧义。
 
@@ -216,10 +217,10 @@ Linux 推荐使用**抽象 Unix Domain Socket**：
 
 Linux 不使用注册表。应用内“注册文件关联”改成用户级桌面集成：
 
-1. 写入 `$XDG_DATA_HOME/applications/litemark.desktop`。
-2. 写入 `$XDG_DATA_HOME/mime/packages/litemark.xml`，声明 `*.md`、`*.markdown`。
+1. 写入 `$XDG_DATA_HOME/applications/quikmark.desktop`。
+2. 写入 `$XDG_DATA_HOME/mime/packages/quikmark.xml`，声明 `*.md`、`*.markdown`。
 3. 执行 `update-desktop-database` 和 `update-mime-database`。
-4. 通过 `xdg-mime default litemark.desktop text/markdown` 设置默认打开方式。
+4. 通过 `xdg-mime default quikmark.desktop text/markdown` 设置默认打开方式。
 
 所有操作只影响当前用户，不调用 `sudo`。若系统缺少 XDG 工具，菜单应显示明确错误，不影响打开文件。
 
@@ -292,7 +293,8 @@ Linux 推荐字体候选：
 
 字体只决定优先尝试顺序，最终仍由 `wxFontEnumerator` 检查是否可用。
 
-主题方面，liteMark 自己绘制的正文、Tab、目录和占位控件使用现有明暗配色。GTK 菜单、文件对话框和窗口装饰继续跟随桌面主题；首版不修改全局 GTK 设置。
+主题方面，QuikMark 自己绘制的正文、Tab、目录和占位控件使用现有明暗配色。
+GTK 菜单、文件对话框和窗口装饰继续跟随桌面主题；首版不修改全局 GTK 设置。
 
 ## 7. 路径与用户数据
 
@@ -300,11 +302,11 @@ Linux 遵循 XDG：
 
 | 用途 | 路径 |
 |---|---|
-| 设置 | `${XDG_CONFIG_HOME:-~/.config}/litemark/settings.ini` |
-| 工作区状态 | `${XDG_CONFIG_HOME:-~/.config}/litemark/workspace.ini` |
-| 桌面入口 | `${XDG_DATA_HOME:-~/.local/share}/applications/litemark.desktop` |
-| MIME 声明 | `${XDG_DATA_HOME:-~/.local/share}/mime/packages/litemark.xml` |
-| 运行时 socket 回退 | `${XDG_RUNTIME_DIR:-/tmp}/litemark-$UID.sock` |
+| 设置 | `${XDG_CONFIG_HOME:-~/.config}/quikmark/settings.ini` |
+| 工作区状态 | `${XDG_CONFIG_HOME:-~/.config}/quikmark/workspace.ini` |
+| 桌面入口 | `${XDG_DATA_HOME:-~/.local/share}/applications/quikmark.desktop` |
+| MIME 声明 | `${XDG_DATA_HOME:-~/.local/share}/mime/packages/quikmark.xml` |
+| 运行时 socket 回退 | `${XDG_RUNTIME_DIR:-/tmp}/quikmark-$UID.sock` |
 
 所有 IPC 路径使用 UTF-8，文件监听继续使用 `wxFileSystemWatcher`。Linux 下它由 inotify 支撑，编辑器通过“写入临时文件再替换”保存时仍需重新注册监听。
 
@@ -455,10 +457,10 @@ ctest --test-dir build/linux-release --output-on-failure
 
 使用 Ubuntu 22.04.5 base rootfs 作为独立 chroot 构建和安装环境：
 
-- 在 Ubuntu 中重新编译 wxWidgets 3.3、md4c 和 liteMark。
+- 在 Ubuntu 中重新编译 wxWidgets 3.3、md4c 和 QuikMark。
 - 16/16 单元测试通过。
-- 将 wxWidgets 的两个运行库放入 `/usr/lib/litemark`。
-- 主程序 RUNPATH 设置为 `$ORIGIN/../lib/litemark`，wx 库使用 `$ORIGIN`。
+- 将 wxWidgets 的两个运行库放入 `/usr/lib/quikmark`。
+- 主程序 RUNPATH 设置为 `$ORIGIN/../lib/quikmark`，wx 库使用 `$ORIGIN`。
 - 依赖由 `dpkg-shlibdeps` 计算，覆盖 GTK3、X11、libpng、libtiff 等系统库。
 - `dpkg -i` 安装成功。
 - 暂时移走 `/opt/wxWidgets-3.3.0` 后，安装包仍能加载私有 wx 库并完成 Xvfb 启动冒烟。
@@ -482,11 +484,14 @@ dist/litemark_1.0.0_amd64.deb
 
 ### 12.6 1.0.1 状态图标发行验证
 
+该节记录 QuikMark 改名前的 liteMark 1.0.1 构建产物，仅作为历史验证数据。
+QuikMark 1.1.0 本轮只更新源码，不重新生成 Linux 安装包。
+
 `1.0.1` 将彩色状态符号改为 36 个内嵌 PNG：
 
 - 图标源图统一为 128×128 RGBA PNG，运行时按 DPI、行高和字体缩放缓存。
 - Windows 和 Linux 共用同一套资源，未知符号回退为系统字体。
-- Linux 帮助文件同时安装到 `/usr/share/litemark/`，避免精简系统排除
+- Linux 帮助文件同时安装到 `/usr/share/quikmark/`，避免精简系统排除
   `/usr/share/doc/*` 后无法从帮助菜单打开。
 - Linux 19/19 测试、Windows 17/17 测试通过。
 
@@ -509,7 +514,7 @@ AppImage 在 Ubuntu 22.04.5 chroot 中构建：
 ```bash
 bash scripts/setup-appimage-tools.sh
 bash scripts/package-appimage.sh \
-  --exe build/linux-release/bin/litemark \
+  --exe build/linux-release/bin/quikmark \
   --wx-lib-dir /opt/wxWidgets-3.3.0/lib
 ```
 
@@ -517,7 +522,7 @@ bash scripts/package-appimage.sh \
 type-2 runtime 和 GTK 插件。linuxdeploy 负责收集并修正动态库 RUNPATH，
 AppDir 同时包含：
 
-- `usr/bin/litemark`
+- `usr/bin/quikmark`
 - wxWidgets、libcurl、GTK3 和 GDK-Pixbuf
 - `.desktop`、SVG 图标和 Markdown MIME 声明
 - 项目许可证和使用说明

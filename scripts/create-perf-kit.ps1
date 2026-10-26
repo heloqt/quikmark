@@ -1,6 +1,6 @@
 param(
-    [string]$Exe = "build\mingw-release-static\bin\litemark.exe",
-    [string]$OutputDirectory = "dist\liteMark-perf-kit",
+    [string]$Exe = "build\mingw-release-static\bin\quikmark.exe",
+    [string]$OutputDirectory = "dist\QuikMark-perf-kit",
     [switch]$Zip
 )
 
@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $toolDirectory = Join-Path $OutputDirectory "scripts"
 New-Item -ItemType Directory -Path $toolDirectory -Force | Out-Null
 
-Copy-Item -LiteralPath $Exe -Destination (Join-Path $OutputDirectory "liteMark.exe")
+Copy-Item -LiteralPath $Exe -Destination (Join-Path $OutputDirectory "quikmark.exe")
 foreach ($name in @(
     "benchmark.ps1",
     "block-stress-benchmark.ps1",
@@ -58,9 +58,9 @@ foreach ($name in @(
         -Destination $docsDirectory
 }
 
-$hash = Get-FileHash -LiteralPath (Join-Path $OutputDirectory "liteMark.exe") `
+$hash = Get-FileHash -LiteralPath (Join-Path $OutputDirectory "quikmark.exe") `
     -Algorithm SHA256
-"$($hash.Hash)  liteMark.exe" |
+"$($hash.Hash)  quikmark.exe" |
     Set-Content -LiteralPath (Join-Path $OutputDirectory "SHA256SUMS.txt") `
         -Encoding ASCII
 

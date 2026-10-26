@@ -8,8 +8,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running litemark instances before benchmarking."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before benchmarking."
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot

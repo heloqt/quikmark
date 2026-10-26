@@ -61,7 +61,7 @@ bool DownloadImageUrl(const wxString& url, std::vector<std::uint8_t>* bytes,
     }
 
     InternetHandle session(WinHttpOpen(
-        L"liteMark/0.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        L"QuikMark/1.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session) {
         SetError(error, L"无法初始化网络连接");

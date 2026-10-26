@@ -3,7 +3,7 @@ set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 version=""
-exe="${project_root}/build/linux-release/bin/litemark"
+exe="${project_root}/build/linux-release/bin/quikmark"
 wx_lib_dir="/opt/wxWidgets-3.3.0/lib"
 tools_dir="${project_root}/build/appimage-tools"
 output=""
@@ -44,11 +44,11 @@ done
 
 if [[ -z "${version}" ]]; then
     version="$(sed -nE \
-        's/.*project\(liteMark VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' \
+        's/.*project\(QuikMark VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' \
         "${project_root}/CMakeLists.txt" | head -n 1)"
 fi
 if [[ -z "${version}" ]]; then
-    echo "Unable to read the liteMark version." >&2
+    echo "Unable to read the QuikMark version." >&2
     exit 1
 fi
 
@@ -88,16 +88,16 @@ for library_name in \
     fi
 done
 
-desktop_source="${project_root}/packaging/appimage/litemark.desktop"
-icon_source="${project_root}/packaging/appimage/litemark.svg"
-mime_source="${project_root}/packaging/debian/litemark.xml"
+desktop_source="${project_root}/packaging/appimage/quikmark.desktop"
+icon_source="${project_root}/packaging/appimage/quikmark.svg"
+mime_source="${project_root}/packaging/debian/quikmark.xml"
 license_source="${project_root}/LICENSE"
 notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
 desktop-file-validate "${desktop_source}"
 
 work_dir="${project_root}/build/appimage-package"
-appdir="${work_dir}/liteMark.AppDir"
+appdir="${work_dir}/QuikMark.AppDir"
 case "${appdir}" in
     "${project_root}"/build/appimage-package/*) ;;
     *)
@@ -109,9 +109,9 @@ rm -rf "${appdir}"
 mkdir -p \
     "${appdir}/usr/share/applications" \
     "${appdir}/usr/share/icons/hicolor/scalable/apps" \
-    "${appdir}/usr/share/litemark" \
+    "${appdir}/usr/share/quikmark" \
     "${appdir}/usr/share/mime/packages" \
-    "${appdir}/usr/share/doc/litemark"
+    "${appdir}/usr/share/doc/quikmark"
 
 export PATH="${tools_dir}:${PATH}"
 export ARCH="x86_64"
@@ -133,32 +133,32 @@ else
 fi
 
 install -D -m 0644 "${desktop_source}" \
-    "${appdir}/usr/share/applications/litemark.desktop"
+    "${appdir}/usr/share/applications/quikmark.desktop"
 install -D -m 0644 "${icon_source}" \
-    "${appdir}/usr/share/icons/hicolor/scalable/apps/litemark.svg"
+    "${appdir}/usr/share/icons/hicolor/scalable/apps/quikmark.svg"
 install -D -m 0644 "${mime_source}" \
-    "${appdir}/usr/share/mime/packages/litemark.xml"
+    "${appdir}/usr/share/mime/packages/quikmark.xml"
 install -D -m 0644 "${license_source}" \
-    "${appdir}/usr/share/doc/litemark/LICENSE"
+    "${appdir}/usr/share/doc/quikmark/LICENSE"
 install -D -m 0644 "${notice_source}" \
-    "${appdir}/usr/share/doc/litemark/THIRD_PARTY_NOTICES.md"
+    "${appdir}/usr/share/doc/quikmark/THIRD_PARTY_NOTICES.md"
 install -D -m 0644 "${usage_source}" \
-    "${appdir}/usr/share/doc/litemark/使用说明.md"
+    "${appdir}/usr/share/doc/quikmark/使用说明.md"
 install -D -m 0644 "${usage_source}" \
-    "${appdir}/usr/share/litemark/使用说明.md"
+    "${appdir}/usr/share/quikmark/使用说明.md"
 install -D -m 0644 "${notice_source}" \
-    "${appdir}/usr/share/litemark/THIRD_PARTY_NOTICES.md"
+    "${appdir}/usr/share/quikmark/THIRD_PARTY_NOTICES.md"
 
-ln -sfn usr/share/applications/litemark.desktop \
-    "${appdir}/litemark.desktop"
-ln -sfn usr/share/icons/hicolor/scalable/apps/litemark.svg \
-    "${appdir}/litemark.svg"
+ln -sfn usr/share/applications/quikmark.desktop \
+    "${appdir}/quikmark.desktop"
+ln -sfn usr/share/icons/hicolor/scalable/apps/quikmark.svg \
+    "${appdir}/quikmark.svg"
 if [[ ! -e "${appdir}/AppRun" ]]; then
     echo "linuxdeploy did not create AppRun." >&2
     exit 1
 fi
 
-dependency_report="$(ldd "${appdir}/usr/bin/litemark")"
+dependency_report="$(ldd "${appdir}/usr/bin/quikmark")"
 if grep -q "not found" <<<"${dependency_report}"; then
     echo "${dependency_report}" >&2
     echo "AppDir contains unresolved runtime dependencies." >&2
@@ -166,7 +166,7 @@ if grep -q "not found" <<<"${dependency_report}"; then
 fi
 
 if [[ -z "${output}" ]]; then
-    output="${project_root}/dist/liteMark-${version}-x86_64.AppImage"
+    output="${project_root}/dist/QuikMark-${version}-x86_64.AppImage"
 elif [[ "${output}" != /* ]]; then
     output="${project_root}/${output}"
 fi

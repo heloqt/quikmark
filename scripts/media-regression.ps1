@@ -1,11 +1,11 @@
 param(
-    [string]$Exe = "build\mingw-release-static\bin\litemark.exe"
+    [string]$Exe = "build\mingw-release-static\bin\quikmark.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running liteMark instances before media regression."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before media regression."
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -90,7 +90,7 @@ try {
              -not $process.HasExited -and [DateTime]::UtcNow -lt $deadline)
     if ($process.HasExited -or
         $process.MainWindowHandle -eq [IntPtr]::Zero) {
-        throw "liteMark did not show its main window."
+        throw "QuikMark did not show its main window."
     }
 
     $document = Get-LargestChild $process.MainWindowHandle

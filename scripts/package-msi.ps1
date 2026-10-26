@@ -1,6 +1,6 @@
 param(
     [string]$Version = "",
-    [string]$Exe = "build\mingw-release-static\bin\litemark.exe",
+    [string]$Exe = "build\mingw-release-static\bin\quikmark.exe",
     [string]$Output = ""
 )
 
@@ -13,10 +13,10 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     $cmakeText = Get-Content -LiteralPath `
         (Join-Path $projectRoot "CMakeLists.txt") -Raw
     if ($cmakeText -match `
-        'project\s*\(\s*liteMark\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+        'project\s*\(\s*QuikMark\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
         $Version = $Matches[1]
     } else {
-        throw "Unable to read the liteMark version from CMakeLists.txt"
+        throw "Unable to read the QuikMark version from CMakeLists.txt"
     }
 }
 
@@ -42,18 +42,18 @@ if (-not (Test-Path -LiteralPath $wix)) {
 $distDir = Join-Path $projectRoot "dist"
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 if ([string]::IsNullOrWhiteSpace($Output)) {
-    $Output = Join-Path $distDir "liteMark-$Version-x64.msi"
+    $Output = Join-Path $distDir "quikmark-$Version-x64.msi"
 } elseif (-not [IO.Path]::IsPathRooted($Output)) {
     $Output = Join-Path $projectRoot $Output
 }
 
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
-$usageFile = Join-Path $projectRoot "build\liteMark-usage.md"
-$iconFile = Join-Path $projectRoot "build\liteMark-installer.ico"
+$usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
+$iconFile = Join-Path $projectRoot "build\QuikMark-installer.ico"
 $licenseFile = Join-Path $projectRoot "LICENSE"
 $noticeFile = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $licenseRtf = Join-Path $projectRoot "installer\license-summary.rtf"
-$source = Join-Path $projectRoot "installer\litemark.wxs"
+$source = Join-Path $projectRoot "installer\quikmark.wxs"
 foreach ($required in @(
     $usageSource, $licenseFile, $noticeFile, $licenseRtf, $source
 )) {

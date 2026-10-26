@@ -6,21 +6,21 @@ $ErrorActionPreference = "Stop"
 $projectRoot = (Get-Location).Path
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $cmakeText = Get-Content -LiteralPath (Join-Path $projectRoot "CMakeLists.txt") -Raw
-    if ($cmakeText -match 'project\s*\(\s*liteMark\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+    if ($cmakeText -match 'project\s*\(\s*QuikMark\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
         $Version = $Matches[1]
     } else {
-        throw "Unable to read the liteMark version from CMakeLists.txt"
+        throw "Unable to read the QuikMark version from CMakeLists.txt"
     }
 }
-$sourceExe = Join-Path $projectRoot "build\mingw-release-static\bin\litemark.exe"
+$sourceExe = Join-Path $projectRoot "build\mingw-release-static\bin\quikmark.exe"
 $makensis = "D:\msys64-33\ucrt64\bin\makensis.exe"
-$script = Join-Path $projectRoot "installer\litemark.nsi"
+$script = Join-Path $projectRoot "installer\quikmark.nsi"
 $license = Join-Path $projectRoot "LICENSE"
 $notice = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
-$usageFile = Join-Path $projectRoot "build\liteMark-usage.md"
+$usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
 $distDir = Join-Path $projectRoot "dist"
-$output = Join-Path $distDir "liteMark-$Version-setup.exe"
+$output = Join-Path $distDir "quikmark-$Version-setup.exe"
 
 if (-not (Test-Path -LiteralPath $makensis)) {
     throw "makensis not found at $makensis"

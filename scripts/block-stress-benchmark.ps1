@@ -1,5 +1,5 @@
 param(
-    [string]$Exe = "build\mingw-release-static\bin\litemark.exe",
+    [string]$Exe = "build\mingw-release-static\bin\quikmark.exe",
     [int]$Samples = 5,
     [int]$TableRows = 5000,
     [int]$ParagraphWords = 1900000
@@ -7,8 +7,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running liteMark instances before block stress testing."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before block stress testing."
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot

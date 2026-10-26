@@ -1,4 +1,4 @@
-# liteMark 静态 EXE 性能测试包
+# QuikMark 静态 EXE 性能测试包
 
 ## 适用环境
 
@@ -37,7 +37,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 3. 先运行一次快速预热：
 
 ```powershell
-.\liteMark.exe
+.\quikmark.exe
 ```
 
 关闭窗口后，再运行正式测试。

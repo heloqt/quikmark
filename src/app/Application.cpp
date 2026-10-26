@@ -1,5 +1,7 @@
 #include "app/Application.h"
 
+#include "app/ProductInfo.h"
+#include "app/UserData.h"
 #include "platform/IpcServer.h"
 #include "platform/PerformanceTrace.h"
 #include "platform/SingletonGuard.h"
@@ -24,8 +26,8 @@ Application::~Application() = default;
 bool Application::OnInit() {
     TraceEvent("startup_begin",
                static_cast<double>(ProcessAgeMicroseconds()));
-    SetAppName("liteMark");
-    SetVendorName("liteMark");
+    SetAppName(kProductName);
+    SetVendorName(kProductName);
     wxInitAllImageHandlers();
     TraceEvent("startup_images",
                static_cast<double>(ProcessAgeMicroseconds()));
@@ -42,28 +44,21 @@ bool Application::OnInit() {
     }
 
     singleton_ = std::make_unique<SingletonGuard>(
-        "liteMark.SingleInstance.Mutex");
+        "QuikMark.SingleInstance.Mutex");
     if (!singleton_->IsPrimary()) {
         if (!SendOpenRequestToPrimary(paths)) {
             wxMessageBox(wxString::FromUTF8(
-                             "无法连接正在运行的 liteMark 实例。"),
-                         "liteMark", wxOK | wxICON_ERROR);
+                             "无法连接正在运行的 QuikMark 实例。"),
+                         kProductName, wxOK | wxICON_ERROR);
         }
         CallAfter([this]() { ExitMainLoop(); });
         return true;
     }
 
+    app::MigrateLegacyUserData();
     theme_ = std::make_unique<ThemeController>();
-    wxString configRoot;
-    if (!wxGetEnv("LITEMARK_CONFIG_DIR", &configRoot) ||
-        configRoot.empty()) {
-        configRoot = wxStandardPaths::Get().GetUserConfigDir();
-    }
-    wxFileName configDirectory(configRoot, wxString());
-    configDirectory.AppendDir("liteMark");
-    configDirectory.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
     const wxString workspacePath =
-        wxFileName(configDirectory.GetPath(), "workspace.ini").GetFullPath();
+        app::ConfigFilePath("workspace.ini");
     TraceEvent("startup_before_frame",
                static_cast<double>(ProcessAgeMicroseconds()));
     frame_ = new MainFrame(*theme_, workspacePath);

@@ -159,7 +159,7 @@ struct DocumentView::Impl {
     double zoomWheelAccumulator = 0.0;
     FontMap fonts;
     std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
-    wxString messageTitle = U8("liteMark");
+    wxString messageTitle = U8("QuikMark");
     wxString messageBody = U8(
         "这是一个只读 Markdown 阅读器。\n"
         "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
@@ -1140,10 +1140,11 @@ void DocumentView::ShowPlaceholder() {
     impl_->searchMatches.clear();
     impl_->activeSearchMatch = -1;
     impl_->media->SetBasePath({});
-    impl_->messageTitle = U8("liteMark");
+    impl_->messageTitle = U8("QuikMark");
     impl_->messageBody = U8(
-        "这是一个只读 Markdown 阅读器。\n"
-        "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
+        "原生、轻量的 Markdown 阅读器。\n"
+        "快速打开，专注阅读，不提供编辑功能。\n"
+        "使用“文件 > 打开”或将 Markdown 文件拖入窗口。");
     impl_->layoutDirty = true;
     impl_->pendingScrollY.Request(0);
     impl_->pendingReadingAnchor.reset();

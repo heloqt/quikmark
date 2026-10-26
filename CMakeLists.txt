@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(liteMark VERSION 1.0.1 LANGUAGES CXX)
+project(QuikMark VERSION 1.1.0 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -100,6 +100,7 @@ endif()
 set(LITEMARK_SOURCES
     src/app/Application.cpp
     src/app/main.cpp
+    src/app/UserData.cpp
     src/core/flow/Flowchart.cpp
     src/core/document/DocumentNavigation.cpp
     src/core/document/DocumentSearch.cpp
@@ -149,7 +150,7 @@ elseif(UNIX AND NOT APPLE)
     find_package(CURL REQUIRED)
     target_link_libraries(litemark PRIVATE CURL::libcurl)
 else()
-    message(FATAL_ERROR "liteMark currently supports Windows and Linux only")
+    message(FATAL_ERROR "QuikMark currently supports Windows and Linux only")
 endif()
 
 target_include_directories(litemark PRIVATE
@@ -183,11 +184,13 @@ if(WIN32 AND LITEMARK_STATIC_WX)
     target_link_options(litemark PRIVATE -static)
 endif()
 
+set(LITEMARK_EXECUTABLE_NAME "quikmark")
 set_target_properties(litemark PROPERTIES
+    OUTPUT_NAME "${LITEMARK_EXECUTABLE_NAME}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-message(STATUS "liteMark ${PROJECT_VERSION}")
+message(STATUS "QuikMark ${PROJECT_VERSION}")
 message(STATUS "wxWidgets 3.3, static=${LITEMARK_STATIC_WX}")
 message(STATUS "md4c: ${MD4C_LIBRARY}")
 
@@ -352,6 +355,7 @@ if(LITEMARK_BUILD_TESTS)
 
     add_executable(litemark_theme_controller_tests
         tests/theme_controller_tests.cpp
+        src/app/UserData.cpp
         src/ui/ThemeController.cpp
     )
     target_include_directories(litemark_theme_controller_tests PRIVATE src)
@@ -503,6 +507,24 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME help_path COMMAND litemark_help_path_tests)
 
+    add_executable(litemark_user_data_tests
+        tests/user_data_tests.cpp
+        src/app/UserData.cpp
+    )
+    target_include_directories(litemark_user_data_tests PRIVATE src)
+    target_link_libraries(litemark_user_data_tests PRIVATE
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_user_data_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME user_data_migration
+        COMMAND litemark_user_data_tests)
+
     if(UNIX AND NOT APPLE)
         add_executable(litemark_image_downloader_tests
             tests/linux_image_downloader_tests.cpp
@@ -553,6 +575,7 @@ if(LITEMARK_BUILD_TESTS)
         document_search
         workspace_state
         help_path
+        user_data_migration
         PROPERTIES LABELS "unit"
     )
     if(LITEMARK_STATUS_ICON_RENDER_TEST_ADDED)

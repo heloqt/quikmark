@@ -2,8 +2,8 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
-    Name="liteMark"
-    Manufacturer="liteMark"
+    Name="QuikMark"
+    Manufacturer="QuikMark"
     Version="$(var.ProductVersion)"
     Language="2052"
     Codepage="65001"
@@ -14,7 +14,7 @@
 
     <MajorUpgrade
       AllowSameVersionUpgrades="yes"
-      DowngradeErrorMessage="已安装更新版本的 liteMark。" />
+      DowngradeErrorMessage="已安装更新版本的 QuikMark。" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon" SourceFile="$(var.AppIcon)" />
@@ -28,11 +28,11 @@
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="liteMark" />
+        <Directory Id="INSTALLFOLDER" Name="QuikMark" />
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="liteMark" />
+      <Directory Id="ApplicationProgramsFolder" Name="QuikMark" />
     </StandardDirectory>
     <StandardDirectory Id="DesktopFolder" />
 
@@ -41,7 +41,7 @@
                  Guid="2EB6D388-5295-47DE-A570-9C5AE54FF118">
         <File Id="MainExecutable"
               Source="$(var.SourceExe)"
-              Name="liteMark.exe" />
+              Name="quikmark.exe" />
         <File Id="LicenseFile"
               Source="$(var.LicenseFile)"
               Name="LICENSE" />
@@ -58,7 +58,7 @@
                       Directory="ProgramsFolder"
                       On="uninstall" />
         <RegistryValue Root="HKCU"
-                       Key="Software\liteMark"
+                       Key="Software\QuikMark"
                        Name="Installed"
                        Type="integer"
                        Value="1"
@@ -69,25 +69,25 @@
                  Directory="ApplicationProgramsFolder"
                  Guid="A3E3FEC8-1F11-45D3-8664-7F66D26FDCCD">
         <Shortcut Id="StartMenuApp"
-                  Name="liteMark"
-                  Description="liteMark Markdown 阅读器"
-                  Target="[INSTALLFOLDER]liteMark.exe"
+                  Name="QuikMark"
+                  Description="QuikMark Markdown 阅读器"
+                  Target="[INSTALLFOLDER]quikmark.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon" />
         <Shortcut Id="StartMenuUsage"
                   Name="使用说明"
-                  Description="打开 liteMark 使用说明"
+                  Description="打开 QuikMark 使用说明"
                   Target="[INSTALLFOLDER]使用说明.md"
                   WorkingDirectory="INSTALLFOLDER" />
         <Shortcut Id="StartMenuUninstall"
-                  Name="卸载 liteMark"
+                  Name="卸载 QuikMark"
                   Target="[SystemFolder]msiexec.exe"
                   Arguments="/x [ProductCode]" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder"
                       Directory="ApplicationProgramsFolder"
                       On="uninstall" />
         <RegistryValue Root="HKCU"
-                       Key="Software\liteMark"
+                       Key="Software\QuikMark"
                        Name="StartMenuShortcut"
                        Type="integer"
                        Value="1"
@@ -96,8 +96,8 @@
     </ComponentGroup>
 
     <Feature Id="MainFeature"
-             Title="liteMark 程序"
-             Description="安装 liteMark、许可证、第三方声明、使用说明和开始菜单快捷方式。"
+             Title="QuikMark 程序"
+             Description="安装 QuikMark、许可证、第三方声明、使用说明和开始菜单快捷方式。"
              Level="1"
              AllowAbsent="no">
       <ComponentGroupRef Id="MainComponents" />
@@ -105,7 +105,7 @@
 
     <Feature Id="DesktopShortcutFeature"
              Title="桌面快捷方式"
-             Description="在当前用户桌面创建 liteMark 快捷方式。"
+             Description="在当前用户桌面创建 QuikMark 快捷方式。"
              Level="1"
              AllowAbsent="yes">
       <ComponentRef Id="DesktopShortcutComponent" />
@@ -113,7 +113,7 @@
 
     <Feature Id="FileAssociationFeature"
              Title="Markdown 文件关联"
-             Description="使用 liteMark 打开 .md 和 .markdown 文件。"
+             Description="使用 QuikMark 打开 .md 和 .markdown 文件。"
              Level="1"
              AllowAbsent="yes">
       <ComponentRef Id="FileAssociationComponent" />
@@ -123,13 +123,13 @@
                Directory="DesktopFolder"
                Guid="E36F8B79-C498-448C-B562-4B850D5CEE7F">
       <Shortcut Id="DesktopAppShortcut"
-                Name="liteMark"
-                Description="liteMark Markdown 阅读器"
-                Target="[INSTALLFOLDER]liteMark.exe"
+                Name="QuikMark"
+                Description="QuikMark Markdown 阅读器"
+                Target="[INSTALLFOLDER]quikmark.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="AppIcon" />
       <RegistryValue Root="HKCU"
-                     Key="Software\liteMark"
+                     Key="Software\QuikMark"
                      Name="DesktopShortcut"
                      Type="integer"
                      Value="1"
@@ -142,44 +142,44 @@
       <RegistryValue Root="HKCU"
                      Key="Software\Classes\.md"
                      Type="string"
-                     Value="liteMark.Markdown" />
+                     Value="QuikMark.Markdown" />
       <RegistryValue Root="HKCU"
                      Key="Software\Classes\.markdown"
                      Type="string"
-                     Value="liteMark.Markdown" />
+                     Value="QuikMark.Markdown" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\liteMark.Markdown"
+                     Key="Software\Classes\QuikMark.Markdown"
                      Type="string"
                      Value="Markdown Document" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\liteMark.Markdown\DefaultIcon"
+                     Key="Software\Classes\QuikMark.Markdown\DefaultIcon"
                      Type="string"
-                     Value="[INSTALLFOLDER]liteMark.exe,0" />
+                     Value="[INSTALLFOLDER]quikmark.exe,0" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\liteMark.Markdown\shell\open\command"
+                     Key="Software\Classes\QuikMark.Markdown\shell\open\command"
                      Type="string"
-                     Value="&quot;[INSTALLFOLDER]liteMark.exe&quot; &quot;%1&quot;" />
+                     Value="&quot;[INSTALLFOLDER]quikmark.exe&quot; &quot;%1&quot;" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\Applications\liteMark.exe"
+                     Key="Software\Classes\Applications\quikmark.exe"
                      Name="FriendlyAppName"
                      Type="string"
-                     Value="liteMark" />
+                     Value="QuikMark" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\Applications\liteMark.exe\shell\open\command"
+                     Key="Software\Classes\Applications\quikmark.exe\shell\open\command"
                      Type="string"
-                     Value="&quot;[INSTALLFOLDER]liteMark.exe&quot; &quot;%1&quot;" />
+                     Value="&quot;[INSTALLFOLDER]quikmark.exe&quot; &quot;%1&quot;" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\Applications\liteMark.exe\SupportedTypes"
+                     Key="Software\Classes\Applications\quikmark.exe\SupportedTypes"
                      Name=".md"
                      Type="string"
                      Value="" />
       <RegistryValue Root="HKCU"
-                     Key="Software\Classes\Applications\liteMark.exe\SupportedTypes"
+                     Key="Software\Classes\Applications\quikmark.exe\SupportedTypes"
                      Name=".markdown"
                      Type="string"
                      Value="" />
       <RegistryValue Root="HKCU"
-                     Key="Software\liteMark"
+                     Key="Software\QuikMark"
                      Name="FileAssociations"
                      Type="integer"
                      Value="1"

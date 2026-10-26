@@ -62,10 +62,10 @@ int main() {
         }
 
         const wxString desktop =
-            wxFileName(root + "/applications", "litemark.desktop")
+            wxFileName(root + "/applications", "quikmark.desktop")
                 .GetFullPath();
         const wxString mime =
-            wxFileName(root + "/mime/packages", "litemark.xml")
+            wxFileName(root + "/mime/packages", "quikmark.xml")
                 .GetFullPath();
         if (!Check(wxFileExists(desktop), "desktop file was not created") ||
             !Check(wxFileExists(mime), "MIME file was not created")) {
@@ -97,7 +97,7 @@ int main() {
             output, errors, wxEXEC_SYNC | wxEXEC_HIDE_CONSOLE);
         if (!Check(result == 0, "xdg-mime query failed") ||
             !Check(!output.IsEmpty() &&
-                       output[0].Find("litemark.desktop") != wxNOT_FOUND,
+                       output[0].Find("quikmark.desktop") != wxNOT_FOUND,
                    "xdg-mime did not report liteMark as default")) {
             break;
         }

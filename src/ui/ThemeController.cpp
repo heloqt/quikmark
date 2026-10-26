@@ -1,5 +1,7 @@
 #include "ui/ThemeController.h"
 
+#include "app/UserData.h"
+
 #include <wx/fileconf.h>
 #include <wx/filename.h>
 #include <wx/settings.h>
@@ -10,10 +12,7 @@ namespace {
 constexpr const char* kAppearanceKey = "/appearance";
 
 wxString PreferencePath() {
-    wxFileName configDir(wxStandardPaths::Get().GetUserConfigDir(), wxString());
-    configDir.AppendDir("liteMark");
-    configDir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
-    return wxFileName(configDir.GetPath(), "settings.ini").GetFullPath();
+    return litemark::app::ConfigFilePath("settings.ini");
 }
 
 }  // namespace

@@ -35,7 +35,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed for preset $Preset"
 }
 
-$exe = Join-Path $buildDir "bin\litemark.exe"
+$exe = Join-Path $buildDir "bin\quikmark.exe"
 if (-not (Test-Path -LiteralPath $exe)) {
     throw "Build finished but executable was not found: $exe"
 }

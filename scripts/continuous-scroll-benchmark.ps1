@@ -8,16 +8,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running litemark instances before benchmarking."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before benchmarking."
 }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($Exe)) {
-    $portableExe = Join-Path $projectRoot "liteMark.exe"
+    $portableExe = Join-Path $projectRoot "quikmark.exe"
     $Exe = if (Test-Path -LiteralPath $portableExe) {
         $portableExe
     } else {
-        Join-Path $projectRoot "build\mingw-release-static\bin\litemark.exe"
+        Join-Path $projectRoot "build\mingw-release-static\bin\quikmark.exe"
     }
 } elseif (-not [IO.Path]::IsPathRooted($Exe)) {
     $Exe = Join-Path $projectRoot $Exe

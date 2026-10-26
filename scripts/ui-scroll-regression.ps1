@@ -1,11 +1,11 @@
 param(
-    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\litemark.exe"
+    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\quikmark.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running litemark instances before running this test."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before running this test."
 }
 if (-not (Test-Path -LiteralPath $Exe)) {
     throw "Executable not found: $Exe"

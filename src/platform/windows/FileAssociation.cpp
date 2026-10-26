@@ -1,5 +1,7 @@
 #include "platform/FileAssociation.h"
 
+#include "app/ProductInfo.h"
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shlobj.h>
@@ -52,7 +54,7 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     const std::wstring executable = ExecutablePath();
     if (executable.empty()) {
         if (error != nullptr) {
-            *error = wxString::FromUTF8("无法获取 liteMark 可执行文件路径");
+            *error = wxString::FromUTF8("无法获取 QuikMark 可执行文件路径");
         }
         return false;
     }
@@ -66,7 +68,7 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
 
     for (const wchar_t* extension : extensions) {
         if (!SetValue(HKEY_CURRENT_USER, extension, nullptr,
-                      L"liteMark.Markdown")) {
+                      kWindowsProgId)) {
             if (error != nullptr) {
                 *error = wxString::FromUTF8("写入文件扩展名关联失败");
             }
@@ -74,7 +76,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
         }
     }
 
-    const std::wstring progId = L"Software\\Classes\\liteMark.Markdown";
+    const std::wstring progId =
+        std::wstring(L"Software\\Classes\\") + kWindowsProgId;
     if (!SetValue(HKEY_CURRENT_USER, progId.c_str(), nullptr,
                   L"Markdown Document") ||
         !SetValue(HKEY_CURRENT_USER, (progId + L"\\DefaultIcon").c_str(),
@@ -89,7 +92,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     }
 
     const std::wstring application =
-        L"Software\\Classes\\Applications\\liteMark.exe";
+        std::wstring(L"Software\\Classes\\Applications\\") +
+        kWindowsApplicationName;
     if (!SetValue(HKEY_CURRENT_USER,
                   (application + L"\\shell\\open\\command").c_str(), nullptr,
                   openCommand) ||

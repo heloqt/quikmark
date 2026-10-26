@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($Integration) {
-    $exe = Join-Path $buildDir "bin\litemark.exe"
+    $exe = Join-Path $buildDir "bin\quikmark.exe"
     powershell -NoProfile -ExecutionPolicy Bypass `
         -File .\scripts\ui-scroll-regression.ps1 -Exe $exe
     if ($LASTEXITCODE -ne 0) {

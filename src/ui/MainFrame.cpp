@@ -1,6 +1,7 @@
 #include "ui/MainFrame.h"
 
 #include "litemark/Version.h"
+#include "app/ProductInfo.h"
 #include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
 #include "platform/FileAssociation.h"
@@ -87,7 +88,7 @@ private:
 namespace litemark {
 
 MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
-    : wxFrame(nullptr, wxID_ANY, U8("liteMark"), wxDefaultPosition, wxDefaultSize),
+    : wxFrame(nullptr, wxID_ANY, U8(kProductName), wxDefaultPosition, wxDefaultSize),
       theme_(theme),
       workspaceStore_(std::make_unique<WorkspaceStore>(
           std::filesystem::path(workspacePath.ToStdWstring()))) {
@@ -430,7 +431,7 @@ void MainFrame::CreateMenuBar() {
     auto* helpMenu = new wxMenu();
     helpMenu->Append(ID_HELP_USAGE, U8("使用说明\tF1"));
     helpMenu->AppendSeparator();
-    helpMenu->Append(ID_ABOUT, U8("关于 liteMark"));
+    helpMenu->Append(ID_ABOUT, U8("关于 QuikMark"));
 
     auto* menuBar = new wxMenuBar();
     menuBar->Append(fileMenu, U8("文件"));
@@ -661,19 +662,20 @@ void MainFrame::OnHelpUsage(wxCommandEvent&) {
             return;
         }
     }
-    wxMessageBox(U8("找不到使用说明。请重新安装 liteMark。"),
+    wxMessageBox(U8("找不到使用说明。请重新安装 QuikMark。"),
                  U8("使用说明"), wxOK | wxICON_WARNING, this);
 }
 
 void MainFrame::OnAbout(wxCommandEvent&) {
     wxAboutDialogInfo info;
-    info.SetName("liteMark");
+    info.SetName(kProductName);
     info.SetVersion(wxString::FromUTF8(LITEMARK_VERSION_STRING));
     info.SetDescription(
-        U8("纯阅读态 Markdown 阅读器\n\n构建：") +
+        U8("原生、轻量的 Markdown 阅读器\n"
+           "快速打开，专注阅读，不提供编辑功能\n\n构建：") +
         wxString::FromUTF8(LITEMARK_BUILD_TYPE) + "\n" +
         wxString::Format("wxWidgets %s", wxVERSION_STRING));
-    info.SetCopyright(U8("Copyright © 2026 liteMark contributors"));
+    info.SetCopyright(U8("Copyright © 2026 QuikMark contributors"));
     wxAboutBox(info, this);
 }
 
@@ -875,7 +877,7 @@ void MainFrame::UpdateFromTabs() {
     const TabSession* current = tabs_.selected();
     if (current == nullptr) {
         documentView_->ShowPlaceholder();
-        SetTitle(U8("liteMark"));
+        SetTitle(U8("QuikMark"));
     } else {
         if (current->document) {
             documentView_->SetDocument(current->document, current->path,
@@ -890,7 +892,7 @@ void MainFrame::UpdateFromTabs() {
                 U8("正在解析"),
                 current->title + U8("\n\nMarkdown 文档正在后台解析。"));
         }
-        SetTitle(current->title + U8(" - liteMark"));
+        SetTitle(current->title + U8(" - QuikMark"));
     }
     UpdateChangeBanner();
     Layout();
@@ -1291,7 +1293,7 @@ void MainFrame::OnCloseTab(wxCommandEvent&) {
 
 void MainFrame::OnRegisterFileAssociation(wxCommandEvent&) {
     const int answer = wxMessageBox(
-        U8("将 liteMark 注册为 .md 和 .markdown 文件的打开方式？\n"
+        U8("将 QuikMark 注册为 .md 和 .markdown 文件的打开方式？\n"
            "该操作只修改当前用户的文件关联。"),
         U8("注册文件关联"), wxYES_NO | wxICON_QUESTION, this);
     if (answer != wxYES) {
@@ -1303,7 +1305,7 @@ void MainFrame::OnRegisterFileAssociation(wxCommandEvent&) {
         wxMessageBox(error, U8("注册失败"), wxOK | wxICON_ERROR, this);
         return;
     }
-    wxMessageBox(U8("文件关联注册完成。"), U8("liteMark"),
+    wxMessageBox(U8("文件关联注册完成。"), U8("QuikMark"),
                  wxOK | wxICON_INFORMATION, this);
 }
 

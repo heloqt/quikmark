@@ -1,43 +1,19 @@
 [简体中文](README.md) | [English](README.en.md)
 
-# liteMark
+# QuikMark
 
-liteMark 是一个原生、轻量、只读的 Markdown 阅读器，不依赖 Chromium 或浏览器内核，面向 AI 文档、设计文档和日常 Markdown 的快速阅读。
+QuikMark 是一个原生、轻量的 Markdown 阅读器。快速打开，专注阅读，
+不提供编辑功能，不依赖 Chromium 或浏览器内核。
 
 > 性能摘要：150 KB 文档冷启动约 150–200 ms，热打开约 20 ms，Tab 切换约 10–20 ms；10 MB 文档首屏约 180 ms，剩余内容在后台继续解析（Intel Core i5-14500、Windows 11、平衡电源模式实测）。
 
-当前版本：**1.0.1**
+当前版本：**1.1.0**（源码开发版，安装包尚未生成）
 
 ## 下载
 
-适用于 Windows 10/11 x64：
-
-- [Gitee Releases 下载页](https://gitee.com/heloqt/litemark/releases)
-- [直接下载 liteMark 1.0.1 安装包](https://gitee.com/heloqt/litemark/releases/download/v1.0.1/liteMark-1.0.1-setup.exe)
-
-适用于 Ubuntu 22.04 及更新版本的 x86_64 桌面：
-
-- `litemark_1.0.1_amd64.deb`：系统集成和卸载流程更完整。
-- `liteMark-1.0.1-x86_64.AppImage`：单文件运行，不需要安装。
-
-SHA256（`liteMark-1.0.1-setup.exe`）：
-
-```text
-09DD07D7C8B36F7A1BD8A7D4BA2BA1A991BF2926AC285EF28588B58BC07DC22E
-```
-
-Linux 包 SHA256：
-
-```text
-60ebfed29ae0548c436152b5de7ec832b60dce9ed15b5ffb15a6f9b2d6e09d16  litemark_1.0.1_amd64.deb
-ce4a02bb7ae93bd8a84f22d5001d8392d47b31eb3320f6dae152ab9628ec3d5b  liteMark-1.0.1-x86_64.AppImage
-```
-
-Windows MSI SHA256：
-
-```text
-4F5F0E268DBF300EA9317EC7B0D8637EBCB1F4DE09D22372511D0D24426E7C90  liteMark-1.0.1-x64.msi
-```
+QuikMark 1.1.0 当前为源码开发版，本轮不生成安装包。上一版
+LiteMark 1.0.1 仍可从 [Gitee Releases](https://gitee.com/heloqt/litemark/releases)
+获取。
 
 ## 功能
 
@@ -57,6 +33,7 @@ Windows MSI SHA256：
 - 恢复窗口位置、Tab 顺序、当前 Tab、阅读位置和目录状态。
 - 支持跟随系统、浅色和暗色主题。
 - 检测文件变化并显示非模态重载提示，采用单实例运行。
+- 从 liteMark 升级时，首次启动会迁移工作区、最近文档和主题设置。
 - 大文档先解析安全前缀并显示首屏，完整内容在后台继续解析。
 - 超长段落和超大表格自动分段，避免单个块阻塞首屏与滚动。
 
@@ -66,18 +43,20 @@ Windows MSI SHA256：
 
 Windows：
 
-- 默认安装到当前用户目录：`%LOCALAPPDATA%\Programs\liteMark`，无需管理员权限。
+- 默认安装到当前用户目录：`%LOCALAPPDATA%\Programs\QuikMark`，无需管理员权限。
 - 开始菜单快捷方式始终创建；桌面快捷方式和 Markdown 文件关联可在安装组件页取消。
 - 卸载时恢复安装前的 Markdown 文件关联。
 - 安装目录包含 `使用说明.md`，开始菜单提供使用说明入口。
-- 完成页的“运行 liteMark”默认不勾选。
+- 完成页的“运行 QuikMark”默认不勾选。
 
 Linux：
 
-- `.deb` 可使用 `sudo apt install ./litemark_1.0.1_amd64.deb` 安装，并会部署桌面入口和 Markdown MIME 声明。
-- AppImage 执行 `chmod +x liteMark-1.0.1-x86_64.AppImage` 后直接运行。
-- 没有 FUSE 2 的发行版可设置 `APPIMAGE_EXTRACT_AND_RUN=1` 后运行 AppImage。
-- AppImage 不会自动抢占 Markdown 默认打开方式；需要时在“文件 > 注册文件关联...”中启用。
+- 计划使用 `quikmark_1.1.0_amd64.deb` 和
+  `QuikMark-1.1.0-x86_64.AppImage` 作为发行物名称。
+- `.deb` 安装后程序入口为 `quikmark`，使用说明位于
+  `/usr/share/quikmark/使用说明.md`。
+- AppImage 不会自动抢占 Markdown 默认打开方式；需要时在
+  “文件 > 注册文件关联...”中启用。
 
 ## 构建
 
@@ -148,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```bash
 bash scripts/setup-appimage-tools.sh
 bash scripts/package-appimage.sh \
-  --exe build/linux-release/bin/litemark \
+  --exe build/linux-release/bin/quikmark \
   --wx-lib-dir /opt/wxWidgets-3.3.0/lib
 ```
 
@@ -160,7 +139,7 @@ AppImage 会打包 wxWidgets、libcurl、GTK3、GDK-Pixbuf、图标、MIME 声�
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\create-perf-kit.ps1 `
-  -OutputDirectory .\dist\liteMark-perf-kit-20261023 `
+  -OutputDirectory .\dist\QuikMark-perf-kit `
   -Zip
 ```
 

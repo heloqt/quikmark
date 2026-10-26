@@ -21,7 +21,7 @@ namespace {
 constexpr std::size_t kMaxPayloadBytes = 1024 * 1024;
 
 std::string SocketPath() {
-    return "/tmp/litemark-" + std::to_string(getuid()) + ".sock";
+    return "/tmp/quikmark-" + std::to_string(getuid()) + ".sock";
 }
 
 std::string ToUtf8Payload(const std::vector<wxString>& paths) {

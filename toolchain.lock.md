@@ -1,6 +1,6 @@
 # Toolchain Lock
 
-liteMark uses an isolated MSYS2 installation so that its wxWidgets 3.3
+QuikMark uses an isolated MSYS2 installation so that its wxWidgets 3.3
 dependency does not affect other projects using `D:\msys64`.
 
 ## Location
@@ -56,5 +56,5 @@ TUNA MSYS2 mirror first.
 Outputs:
 
 ```text
-build\<preset>\bin\litemark.exe
+build\<preset>\bin\quikmark.exe
 ```

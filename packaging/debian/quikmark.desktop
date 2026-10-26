@@ -1,11 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=liteMark
+Name=QuikMark
 Comment=Lightweight native Markdown reader
-Exec=litemark %F
-Icon=litemark
+Exec=quikmark %F
 Terminal=false
 Categories=Office;Viewer;
 MimeType=text/markdown;
 StartupNotify=true
-StartupWMClass=liteMark

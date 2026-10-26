@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$exe = Join-Path $root "liteMark.exe"
+$exe = Join-Path $root "quikmark.exe"
 $script = Join-Path $root "scripts\compare-power-modes.ps1"
 if ([string]::IsNullOrWhiteSpace($Name)) {
     $Name = "power-" + (Get-Date -Format "yyyyMMdd-HHmmss")

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exe="${LITEMARK_LINUX_EXE:-${project_root}/build/linux-release/bin/litemark}"
+exe="${LITEMARK_LINUX_EXE:-${project_root}/build/linux-release/bin/quikmark}"
 wx_lib_dir="${LITEMARK_WX_LIB_DIR:-/opt/wxWidgets-3.3.0/lib}"
 cold_samples="${1:-5}"
 hot_samples="${2:-5}"
@@ -165,7 +165,7 @@ for _ in $(seq 1 100); do
     sleep 0.05
 done
 if [[ -z "${window_id}" ]]; then
-    echo "Unable to locate the liteMark X11 window." >&2
+    echo "Unable to locate the QuikMark X11 window." >&2
     exit 1
 fi
 xdotool windowfocus "${window_id}"

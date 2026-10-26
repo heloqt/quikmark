@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $toolchainBin = "D:\msys64-33\ucrt64\bin"
-$exe = Join-Path (Get-Location) "build\$Preset\bin\litemark.exe"
+$exe = Join-Path (Get-Location) "build\$Preset\bin\quikmark.exe"
 
 if (-not (Test-Path -LiteralPath $exe)) {
     throw "Executable not found. Run scripts/build.ps1 first: $exe"

@@ -127,7 +127,7 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     const wxString desktop =
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=liteMark\n"
+        "Name=QuikMark\n"
         "Comment=Lightweight native Markdown reader\n"
         "Exec=" +
         EscapeDesktopExecArg(executable) +
@@ -147,9 +147,12 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
         "</mime-info>\n";
 
     const wxString desktopPath =
-        wxFileName(applicationsDir.GetPath(), "litemark.desktop").GetFullPath();
+        wxFileName(applicationsDir.GetPath(), "quikmark.desktop").GetFullPath();
     const wxString mimePath =
-        wxFileName(mimeDir.GetPath(), "litemark.xml").GetFullPath();
+        wxFileName(mimeDir.GetPath(), "quikmark.xml").GetFullPath();
+    wxRemoveFile(wxFileName(applicationsDir.GetPath(),
+                            "litemark.desktop").GetFullPath());
+    wxRemoveFile(wxFileName(mimeDir.GetPath(), "litemark.xml").GetFullPath());
     if (!WriteUtf8File(desktopPath, desktop, error) ||
         !WriteUtf8File(mimePath, mimeInfo, error)) {
         return false;
@@ -174,7 +177,7 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     wxArrayString association;
     association.Add(FindTool("xdg-mime"));
     association.Add("default");
-    association.Add("litemark.desktop");
+    association.Add("quikmark.desktop");
     association.Add("text/markdown");
     return RunTool(association, error);
 }

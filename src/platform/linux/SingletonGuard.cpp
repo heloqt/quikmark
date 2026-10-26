@@ -13,7 +13,7 @@ namespace {
 
 std::string LockPath(const char* name) {
     std::string leaf =
-        name != nullptr && *name != '\0' ? name : "litemark";
+        name != nullptr && *name != '\0' ? name : "quikmark";
     for (char& ch : leaf) {
         if (ch == '/' || ch == '\\') {
             ch = '_';

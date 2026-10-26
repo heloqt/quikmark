@@ -1,11 +1,11 @@
 param(
-    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\litemark.exe"
+    [string]$Exe = "D:\work\litemark\build\mingw-release-static\bin\quikmark.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process litemark -ErrorAction SilentlyContinue) {
-    throw "Close all running litemark instances before running this test."
+if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) {
+    throw "Close all running QuikMark or liteMark instances before running this test."
 }
 if (-not (Test-Path -LiteralPath $Exe)) {
     throw "Executable not found: $Exe"
@@ -391,7 +391,7 @@ try {
         throw "Find menu entry is missing. View items: $($viewLabels -join ' | ')"
     }
     if (-not ($helpLabels -match '使用说明') -or
-        -not ($helpLabels -match '关于 liteMark')) {
+        -not ($helpLabels -match '关于 QuikMark')) {
         throw "Help menu entries are missing. Help items: $($helpLabels -join ' | ')"
     }
     $document = Get-LargestChild $selectionProcess.MainWindowHandle
@@ -620,7 +620,7 @@ try {
     }
 }
 
-$workspaceFile = Join-Path $configRoot "liteMark\workspace.ini"
+$workspaceFile = Join-Path $configRoot "QuikMark\workspace.ini"
 $workspace = Get-Content -LiteralPath $workspaceFile -Raw
 if ($workspace -notmatch "tabs.count=2" -or
     $workspace -notmatch "tabs.selected=1" -or

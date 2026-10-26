@@ -7,10 +7,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$exe = Join-Path $root "liteMark.exe"
+$exe = Join-Path $root "quikmark.exe"
 $script = Join-Path $root "scripts\block-stress-benchmark.ps1"
 if (-not (Test-Path -LiteralPath $exe)) {
-    throw "liteMark.exe not found next to this script."
+    throw "quikmark.exe not found next to this script."
 }
 if ([string]::IsNullOrWhiteSpace($Name)) {
     $Name = "block-stress-" + (Get-Date -Format "yyyyMMdd-HHmmss")

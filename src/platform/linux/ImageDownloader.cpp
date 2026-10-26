@@ -108,7 +108,7 @@ bool DownloadImageUrl(const wxString& url, std::vector<std::uint8_t>* bytes,
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(handle, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(handle, CURLOPT_USERAGENT, "liteMark/1.0");
+    curl_easy_setopt(handle, CURLOPT_USERAGENT, "QuikMark/1.1");
     curl_easy_setopt(handle, CURLOPT_PROTOCOLS,
                      static_cast<long>(CURLPROTO_HTTP | CURLPROTO_HTTPS));
     curl_easy_setopt(handle, CURLOPT_REDIR_PROTOCOLS,

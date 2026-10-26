@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr wchar_t kPipeName[] = L"\\\\.\\pipe\\liteMark.SingleInstance.Pipe";
+constexpr wchar_t kPipeName[] = L"\\\\.\\pipe\\QuikMark.SingleInstance.Pipe";
 constexpr DWORD kPipeBufferSize = 64 * 1024;
 
 std::string ToUtf8Payload(const std::vector<wxString>& paths) {
