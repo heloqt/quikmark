@@ -485,7 +485,6 @@ dist/litemark_1.0.0_amd64.deb
 ### 12.6 1.0.1 状态图标发行验证
 
 该节记录 QuikMark 改名前的 liteMark 1.0.1 构建产物，仅作为历史验证数据。
-QuikMark 1.1.0 本轮只更新源码，不重新生成 Linux 安装包。
 
 `1.0.1` 将彩色状态符号改为 36 个内嵌 PNG：
 
@@ -505,6 +504,27 @@ sha256: 60ebfed29ae0548c436152b5de7ec832b60dce9ed15b5ffb15a6f9b2d6e09d16
 dist/liteMark-1.0.1-x86_64.AppImage
 size: 37,693,944 bytes
 sha256: ce4a02bb7ae93bd8a84f22d5001d8392d47b31eb3320f6dae152ab9628ec3d5b
+```
+
+### 12.7 QuikMark 1.1.0 Linux 发行验证
+
+QuikMark 1.1.0 已在 Ubuntu 22.04.5 x86-64 chroot 中重新构建：
+
+- GCC 11.4、CMake 3.31、wxWidgets 3.3。
+- Linux 单元测试 20/20 通过。
+- `.deb` 解包依赖检查及 Xvfb 启动冒烟通过。
+- AppImage 内置 Xvfb 启动冒烟通过。
+
+最终包：
+
+```text
+dist/quikmark_1.1.0_amd64.deb
+size: 4,069,714 bytes
+sha256: 2754461148a40741134ba122809f6be10d8ff1fb2dc5afe9e6686c128b051223
+
+dist/QuikMark-1.1.0-x86_64.AppImage
+size: 37,698,040 bytes
+sha256: a4c9da4a1f889886a3a5e6bfb010295fc0aa25dd465a293b74590b81ce90bc30
 ```
 
 ### 12.5 Ubuntu 22.04 AppImage 验证

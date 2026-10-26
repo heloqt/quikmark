@@ -7,13 +7,22 @@ QuikMark 是一个原生、轻量的 Markdown 阅读器。快速打开，专注�
 
 > 性能摘要：150 KB 文档冷启动约 150–200 ms，热打开约 20 ms，Tab 切换约 10–20 ms；10 MB 文档首屏约 180 ms，剩余内容在后台继续解析（Intel Core i5-14500、Windows 11、平衡电源模式实测）。
 
-当前版本：**1.1.0**（源码开发版，安装包尚未生成）
+当前版本：**1.1.0**
 
 ## 下载
 
-QuikMark 1.1.0 当前为源码开发版，本轮不生成安装包。上一版
-LiteMark 1.0.1 仍可从 [Gitee Releases](https://gitee.com/heloqt/litemark/releases)
-获取。
+QuikMark 1.1.0 已发布到
+[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0)：
+
+| 平台 | 安装包 | 大小 |
+| --- | --- | --- |
+| Windows 10/11 x64 | [quikmark-1.1.0-setup.exe](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) | 4.15 MiB |
+| Windows 10/11 x64 | [quikmark-1.1.0-x64.msi](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) | 4.34 MiB |
+| Ubuntu 22.04+ x64 | [quikmark_1.1.0_amd64.deb](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) | 3.88 MiB |
+| Linux x86-64 | [QuikMark-1.1.0-x86_64.AppImage](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) | 35.95 MiB |
+
+全部文件的 SHA256 校验值见
+[SHA256-1.1.0.txt](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)。
 
 ## 功能
 
@@ -51,10 +60,13 @@ Windows：
 
 Linux：
 
-- 计划使用 `quikmark_1.1.0_amd64.deb` 和
-  `QuikMark-1.1.0-x86_64.AppImage` 作为发行物名称。
+- `.deb` 面向 Ubuntu 22.04 x86-64 及兼容的新发行版，可用
+  `sudo apt install ./quikmark_1.1.0_amd64.deb` 安装。
 - `.deb` 安装后程序入口为 `quikmark`，使用说明位于
   `/usr/share/quikmark/使用说明.md`。
+- AppImage 使用前需要执行 `chmod +x QuikMark-1.1.0-x86_64.AppImage`；
+  系统没有 FUSE 2 时可执行
+  `APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.1.0-x86_64.AppImage`。
 - AppImage 不会自动抢占 Markdown 默认打开方式；需要时在
   “文件 > 注册文件关联...”中启用。
 
@@ -121,6 +133,14 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 版本从 `CMakeLists.txt` 的 `project(... VERSION ...)` 自动读取，安装器输出到 `dist\`。安装包超过 10 MB 时打包失败。
+
+生成 Linux `.deb`：
+
+```bash
+bash scripts/package-deb.sh \
+  --exe build/linux-release/bin/quikmark \
+  --wx-lib-dir /opt/wxWidgets-3.3.0/lib
+```
 
 生成 Linux AppImage：
 
