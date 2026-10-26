@@ -1,5 +1,6 @@
 #include "ui/OutlineList.h"
 
+#include "ui/ColorEmojiRenderer.h"
 #include "ui/FontCatalog.h"
 
 #include <wx/dc.h>
@@ -83,7 +84,12 @@ void OutlineList::OnDrawItem(wxDC& dc, const wxRect& rect,
     const int textY =
         rect.y + (rect.height - dc.GetCharHeight()) / 2;
     dc.SetClippingRegion(rect);
-    dc.DrawText(item.text, rect.x + FromDIP(10) + indent, textY);
+    const int textX = rect.x + FromDIP(10) + indent;
+    if (!detail::DrawEmojiAwareText(
+            dc, item.text, font, palette_.text, textX, textY,
+            FromDIP(28))) {
+        dc.DrawText(item.text, textX, textY);
+    }
     dc.DestroyClippingRegion();
 }
 

@@ -79,6 +79,8 @@ set(LITEMARK_SOURCES
     src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
     src/ui/DocumentMediaRenderer.cpp
+    src/ui/EmojiText.cpp
+    src/ui/ColorEmojiRenderer.cpp
     src/ui/FontCatalog.cpp
     src/ui/MainFrame.cpp
     src/ui/OutlineList.cpp
@@ -127,7 +129,7 @@ target_link_libraries(litemark PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(litemark PRIVATE winhttp)
+    target_link_libraries(litemark PRIVATE winhttp d2d1 dwrite)
 endif()
 
 if(MINGW)
@@ -344,6 +346,50 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
 
+    add_executable(litemark_emoji_text_tests
+        tests/emoji_text_tests.cpp
+        src/ui/EmojiText.cpp
+    )
+    target_include_directories(litemark_emoji_text_tests PRIVATE src)
+    target_link_libraries(litemark_emoji_text_tests PRIVATE
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_emoji_text_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME emoji_text_detection
+        COMMAND litemark_emoji_text_tests)
+
+    if(WIN32)
+        add_executable(litemark_emoji_render_tests
+            tests/emoji_render_tests.cpp
+            src/ui/ColorEmojiRenderer.cpp
+            src/ui/EmojiText.cpp
+            src/ui/FontCatalog.cpp
+            src/ui/TextLayout.cpp
+        )
+        target_include_directories(litemark_emoji_render_tests PRIVATE src)
+        target_link_libraries(litemark_emoji_render_tests PRIVATE
+            wxWidgets::core
+            wxWidgets::base
+            d2d1
+            dwrite
+        )
+        if(MINGW)
+            target_link_options(litemark_emoji_render_tests PRIVATE
+                -static
+                -static-libgcc
+                -static-libstdc++
+            )
+        endif()
+        add_test(NAME color_emoji_rendering
+            COMMAND litemark_emoji_render_tests)
+    endif()
+
     add_executable(litemark_document_navigation_tests
         tests/document_navigation_tests.cpp
         src/core/document/DocumentNavigation.cpp
@@ -433,11 +479,16 @@ if(LITEMARK_BUILD_TESTS)
         file_loading_encoding
         theme_controller
         document_text_selection
+        emoji_text_detection
         document_navigation
         document_search
         workspace_state
         PROPERTIES LABELS "unit"
     )
+    if(WIN32)
+        set_tests_properties(color_emoji_rendering
+            PROPERTIES LABELS "unit")
+    endif()
     if(UNIX AND NOT APPLE)
         set_tests_properties(image_downloader_linux PROPERTIES LABELS "unit")
         if(TARGET litemark_file_association_tests)

@@ -1,4 +1,5 @@
 #include "ui/TextLayout.h"
+#include "ui/EmojiText.h"
 #include "ui/FontCatalog.h"
 
 #include <algorithm>
@@ -165,6 +166,8 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
             if (sameStyle) {
                 last.text += text;
                 last.sourceEnd = sourceStart + sourceBytes;
+                last.emoji =
+                    last.emoji || ContainsEmojiCandidate(text);
                 last.width += width;
                 line.width += width;
             } else {
@@ -174,6 +177,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
                 segment.href = href;
                 segment.x = line.width;
                 segment.width = width;
+                segment.emoji = ContainsEmojiCandidate(text);
                 segment.sourceStart = sourceStart;
                 segment.sourceEnd = sourceStart + sourceBytes;
                 line.segments.push_back(std::move(segment));
@@ -186,6 +190,7 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
             segment.href = href;
             segment.x = 0;
             segment.width = width;
+            segment.emoji = ContainsEmojiCandidate(text);
             segment.sourceStart = sourceStart;
             segment.sourceEnd = sourceStart + sourceBytes;
             line.segments.push_back(std::move(segment));

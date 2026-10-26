@@ -38,6 +38,7 @@ struct Segment {
     wxString href;
     int x = 0;
     int width = 0;
+    bool emoji = false;
     std::size_t sourceStart = 0;
     std::size_t sourceEnd = 0;
 };
