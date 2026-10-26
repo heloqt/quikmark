@@ -68,6 +68,7 @@ stage="${work_dir}/${package_name}"
 desktop_source="${project_root}/packaging/debian/litemark.desktop"
 mime_source="${project_root}/packaging/debian/litemark.xml"
 license_source="${project_root}/LICENSE"
+notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
 
 rm -rf "${stage}"
@@ -77,6 +78,7 @@ mkdir -p \
     "${stage}/usr/lib/litemark" \
     "${stage}/usr/share/applications" \
     "${stage}/usr/share/doc/litemark" \
+    "${stage}/usr/share/litemark" \
     "${stage}/usr/share/mime/packages"
 
 install -m 0755 "${exe}" "${stage}/usr/bin/litemark"
@@ -102,8 +104,14 @@ install -m 0644 "${mime_source}" \
     "${stage}/usr/share/mime/packages/litemark.xml"
 install -m 0644 "${license_source}" \
     "${stage}/usr/share/doc/litemark/copyright"
+install -m 0644 "${notice_source}" \
+    "${stage}/usr/share/doc/litemark/THIRD_PARTY_NOTICES.md"
 install -m 0644 "${usage_source}" \
     "${stage}/usr/share/doc/litemark/使用说明.md"
+install -m 0644 "${usage_source}" \
+    "${stage}/usr/share/litemark/使用说明.md"
+install -m 0644 "${notice_source}" \
+    "${stage}/usr/share/litemark/THIRD_PARTY_NOTICES.md"
 desktop-file-validate \
     "${stage}/usr/share/applications/litemark.desktop"
 

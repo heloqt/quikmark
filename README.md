@@ -6,33 +6,37 @@ liteMark 是一个原生、轻量、只读的 Markdown 阅读器，不依赖 Chr
 
 > 性能摘要：150 KB 文档冷启动约 150–200 ms，热打开约 20 ms，Tab 切换约 10–20 ms；10 MB 文档首屏约 180 ms，剩余内容在后台继续解析（Intel Core i5-14500、Windows 11、平衡电源模式实测）。
 
-当前版本：**1.0.0**
+当前版本：**1.0.1**
 
 ## 下载
 
 适用于 Windows 10/11 x64：
 
 - [Gitee Releases 下载页](https://gitee.com/heloqt/litemark/releases)
-- [直接下载 liteMark 1.0.0 安装包](https://gitee.com/heloqt/litemark/releases/download/v1.0.0/liteMark-1.0.0-setup.exe)
+- [直接下载 liteMark 1.0.1 安装包](https://gitee.com/heloqt/litemark/releases/download/v1.0.1/liteMark-1.0.1-setup.exe)
 
 适用于 Ubuntu 22.04 及更新版本的 x86_64 桌面：
 
-- `litemark_1.0.0_amd64.deb`：系统集成和卸载流程更完整。
-- `liteMark-1.0.0-x86_64.AppImage`：单文件运行，不需要安装。
+- `litemark_1.0.1_amd64.deb`：系统集成和卸载流程更完整。
+- `liteMark-1.0.1-x86_64.AppImage`：单文件运行，不需要安装。
 
-SHA256（`liteMark-1.0.0-setup.exe`）：
+SHA256（`liteMark-1.0.1-setup.exe`）：
 
 ```text
-
-
-F296183CF1C51792BE4A0E5F4D2FDBCEC17F47ECA9E877A36DE07C9AB7BE7450
+09DD07D7C8B36F7A1BD8A7D4BA2BA1A991BF2926AC285EF28588B58BC07DC22E
 ```
 
 Linux 包 SHA256：
 
 ```text
-546061e001c23eeff2124271c6972e01ebc7f4eb71c0f5523ac79c2b176f648a  litemark_1.0.0_amd64.deb
-e8697c61563a27074a2a761f095870000563188bdceb19eaebd9af5a4c27d242  liteMark-1.0.0-x86_64.AppImage
+60ebfed29ae0548c436152b5de7ec832b60dce9ed15b5ffb15a6f9b2d6e09d16  litemark_1.0.1_amd64.deb
+ce4a02bb7ae93bd8a84f22d5001d8392d47b31eb3320f6dae152ab9628ec3d5b  liteMark-1.0.1-x86_64.AppImage
+```
+
+Windows MSI SHA256：
+
+```text
+4F5F0E268DBF300EA9317EC7B0D8637EBCB1F4DE09D22372511D0D24426E7C90  liteMark-1.0.1-x64.msi
 ```
 
 ## 功能
@@ -41,7 +45,8 @@ e8697c61563a27074a2a761f095870000563188bdceb19eaebd9af5a4c27d242  liteMark-1.0.0
 - 支持文件菜单打开、拖入、资源管理器文件关联和第二实例路径转发。
 - 读取 UTF-8 / UTF-8 BOM 文件，单个文档最大 64 MiB。
 - 支持 Markdown 标题、段落、强调、删除线、列表、任务列表、引用、代码块、链接、水平线、表格和图片。
-- Windows 下保留 ✅、❌、⌛、⏸️、⚠️ 等彩色 emoji；正文、表格、flowchart 和目录共用透明 emoji 位图缓存。
+- 内置 36 个常用项目状态 PNG 图标，保留 ✅、❌、⌛、⏸️、⚠️ 等颜色；
+  正文、表格、flowchart 和目录共用透明位图缓存，未收录符号回退为普通文本。
 - 支持内容感知表格列宽、表头样式和超宽表格内部横向滚动。
 - 本地图片、相对路径图片和 HTTP/HTTPS 网络图片异步加载。
 - 支持 Mermaid flowchart 常用方向、节点、边、边标签和单层子图；不支持的内容显示源码。
@@ -69,8 +74,8 @@ Windows：
 
 Linux：
 
-- `.deb` 可使用 `sudo apt install ./litemark_1.0.0_amd64.deb` 安装，并会部署桌面入口和 Markdown MIME 声明。
-- AppImage 执行 `chmod +x liteMark-1.0.0-x86_64.AppImage` 后直接运行。
+- `.deb` 可使用 `sudo apt install ./litemark_1.0.1_amd64.deb` 安装，并会部署桌面入口和 Markdown MIME 声明。
+- AppImage 执行 `chmod +x liteMark-1.0.1-x86_64.AppImage` 后直接运行。
 - 没有 FUSE 2 的发行版可设置 `APPIMAGE_EXTRACT_AND_RUN=1` 后运行 AppImage。
 - AppImage 不会自动抢占 Markdown 默认打开方式；需要时在“文件 > 注册文件关联...”中启用。
 
@@ -167,6 +172,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 - [电源模式性能对比](doc/10-电源模式性能对比.md)
 - [启动阶段打点与复测](doc/14-启动阶段打点与复测.md)
 - [安全软件冷启动影响测试](doc/13-安全软件冷启动影响测试.md)
+- [第三方组件声明](THIRD_PARTY_NOTICES.md)
 
 ## 许可证
 

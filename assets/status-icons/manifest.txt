@@ -1,0 +1,36 @@
+Check|2705|2705|Completed
+Cross|274c|274c|Failed or cancelled
+Warning|26a0|26a0|Warning
+Hourglass|231b|231b|Waiting
+HourglassFlow|23f3|23f3|Waiting with progress
+Pause|23f8|23f8|Paused
+Play|25b6|25b6|Running or resume
+Stop|23f9|23f9|Stopped
+Construction|1f6a7|1f6a7|Work in progress
+Sync|1f504|1f504|Processing or synchronizing
+GreenCircle|1f7e2|1f7e2|Healthy
+YellowCircle|1f7e1|1f7e1|Caution
+OrangeCircle|1f7e0|1f7e0|Elevated risk
+RedCircle|1f534|1f534|Critical
+Blocked|26d4|26d4|Blocked
+Stopped|1f6d1|1f6d1|Stop
+Prohibited|1f6ab|1f6ab|Prohibited
+CheckMark|2714|2714|Check
+XMark|2716|2716|Reject
+Exclamation|2757|2757|Important
+Question|2754|2754|Unknown
+LeftRightArrow|2194|2194|Bidirectional
+DownRightArrow|2198|2198|Continue or next
+LeftArrow|25c0|25c0|Previous
+WhiteSquare|2b1c|2b1c|Pending
+Bell|1f514|1f514|Notice
+Bulb|1f4a1|1f4a1|Idea
+Folder|1f4c1|1f4c1|Folder
+Bug|1f41e|1f41e|Bug
+Wrench|1f527|1f527|Fix
+Test|1f9ea|1f9ea|Test
+Package|1f4e6|1f4e6|Build or package
+Rocket|1f680|1f680|Deployed
+Document|1f4dd|1f4dd|Documentation
+Review|1f440|1f440|Review
+Lock|1f512|1f512|Security

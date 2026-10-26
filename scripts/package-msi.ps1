@@ -51,10 +51,11 @@ $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
 $usageFile = Join-Path $projectRoot "build\liteMark-usage.md"
 $iconFile = Join-Path $projectRoot "build\liteMark-installer.ico"
 $licenseFile = Join-Path $projectRoot "LICENSE"
+$noticeFile = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $licenseRtf = Join-Path $projectRoot "installer\license-summary.rtf"
 $source = Join-Path $projectRoot "installer\litemark.wxs"
 foreach ($required in @(
-    $usageSource, $licenseFile, $licenseRtf, $source
+    $usageSource, $licenseFile, $noticeFile, $licenseRtf, $source
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required MSI input not found: $required"
@@ -82,6 +83,7 @@ try {
     -d "SourceExe=$Exe" `
     -d "AppIcon=$iconFile" `
     -d "LicenseFile=$licenseFile" `
+    -d "NoticeFile=$noticeFile" `
     -d "LicenseRtf=$licenseRtf" `
     -d "UsageFile=$usageFile" `
     -pdbtype none `

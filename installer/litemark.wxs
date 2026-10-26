@@ -45,6 +45,9 @@
         <File Id="LicenseFile"
               Source="$(var.LicenseFile)"
               Name="LICENSE" />
+        <File Id="ThirdPartyNotices"
+              Source="$(var.NoticeFile)"
+              Name="THIRD_PARTY_NOTICES.md" />
         <File Id="UsageFile"
               Source="$(var.UsageFile)"
               Name="使用说明.md" />
@@ -94,7 +97,7 @@
 
     <Feature Id="MainFeature"
              Title="liteMark 程序"
-             Description="安装 liteMark、许可证、使用说明和开始菜单快捷方式。"
+             Description="安装 liteMark、许可证、第三方声明、使用说明和开始菜单快捷方式。"
              Level="1"
              AllowAbsent="no">
       <ComponentGroupRef Id="MainComponents" />

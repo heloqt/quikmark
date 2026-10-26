@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(liteMark VERSION 1.0.0 LANGUAGES CXX)
+project(liteMark VERSION 1.0.1 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -17,6 +17,38 @@ configure_file(
     "${LITEMARK_GENERATED_DIR}/litemark/Version.h"
     @ONLY
 )
+
+set(LITEMARK_STATUS_ICON_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/status-icons/manifest.txt")
+set(LITEMARK_STATUS_ICON_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/status-icons")
+file(STRINGS "${LITEMARK_STATUS_ICON_MANIFEST}" LITEMARK_STATUS_ICON_ENTRIES)
+set(LITEMARK_STATUS_ICON_FILES "${LITEMARK_STATUS_ICON_MANIFEST}")
+foreach(entry IN LISTS LITEMARK_STATUS_ICON_ENTRIES)
+    string(REPLACE "|" ";" fields "${entry}")
+    list(GET fields 2 asset_name)
+    list(APPEND LITEMARK_STATUS_ICON_FILES
+        "${LITEMARK_STATUS_ICON_SOURCE_DIR}/${asset_name}.png")
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${LITEMARK_STATUS_ICON_FILES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateStatusIcons.cmake")
+set(LITEMARK_STATUS_ICON_HEADER
+    "${LITEMARK_GENERATED_DIR}/litemark/StatusIconsGenerated.h")
+set(LITEMARK_STATUS_ICON_SOURCE
+    "${LITEMARK_GENERATED_DIR}/litemark/StatusIconsGenerated.cpp")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSTATUS_ICON_MANIFEST=${LITEMARK_STATUS_ICON_MANIFEST}"
+        "-DSTATUS_ICON_SOURCE_DIR=${LITEMARK_STATUS_ICON_SOURCE_DIR}"
+        "-DSTATUS_ICON_HEADER=${LITEMARK_STATUS_ICON_HEADER}"
+        "-DSTATUS_ICON_SOURCE=${LITEMARK_STATUS_ICON_SOURCE}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateStatusIcons.cmake"
+    RESULT_VARIABLE status_icon_result
+)
+if(NOT status_icon_result EQUAL 0)
+    message(FATAL_ERROR "Failed to generate embedded status icons")
+endif()
 
 option(LITEMARK_STATIC_WX "Link wxWidgets statically" OFF)
 
@@ -79,9 +111,11 @@ set(LITEMARK_SOURCES
     src/session/WorkspaceState.cpp
     src/ui/DocumentView.cpp
     src/ui/DocumentMediaRenderer.cpp
-    src/ui/EmojiText.cpp
-    src/ui/ColorEmojiRenderer.cpp
+    src/ui/StatusIcons.cpp
+    src/ui/StatusIconRenderer.cpp
+    "${LITEMARK_STATUS_ICON_SOURCE}"
     src/ui/FontCatalog.cpp
+    src/ui/HelpPaths.cpp
     src/ui/MainFrame.cpp
     src/ui/OutlineList.cpp
     src/ui/OutlineToggleButton.cpp
@@ -92,6 +126,8 @@ set(LITEMARK_SOURCES
 )
 
 if(WIN32)
+    set_source_files_properties(src/app/litemark.rc PROPERTIES
+        OBJECT_DEPENDS "${LITEMARK_GENERATED_DIR}/litemark/Version.h")
     list(APPEND LITEMARK_SOURCES
         src/app/litemark.rc
         src/platform/windows/FileAssociation.cpp
@@ -129,7 +165,7 @@ target_link_libraries(litemark PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(litemark PRIVATE winhttp d2d1 dwrite)
+    target_link_libraries(litemark PRIVATE winhttp)
 endif()
 
 if(MINGW)
@@ -346,48 +382,64 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
 
-    add_executable(litemark_emoji_text_tests
-        tests/emoji_text_tests.cpp
-        src/ui/EmojiText.cpp
+    add_executable(litemark_status_icon_tests
+        tests/status_icon_tests.cpp
+        src/ui/StatusIcons.cpp
+        "${LITEMARK_STATUS_ICON_SOURCE}"
     )
-    target_include_directories(litemark_emoji_text_tests PRIVATE src)
-    target_link_libraries(litemark_emoji_text_tests PRIVATE
+    target_include_directories(litemark_status_icon_tests PRIVATE
+        src
+        ${LITEMARK_GENERATED_DIR}
+    )
+    target_link_libraries(litemark_status_icon_tests PRIVATE
         wxWidgets::base
     )
     if(MINGW)
-        target_link_options(litemark_emoji_text_tests PRIVATE
+        target_link_options(litemark_status_icon_tests PRIVATE
             -static
             -static-libgcc
             -static-libstdc++
         )
     endif()
-    add_test(NAME emoji_text_detection
-        COMMAND litemark_emoji_text_tests)
+    add_test(NAME status_icon_detection
+        COMMAND litemark_status_icon_tests)
 
-    if(WIN32)
-        add_executable(litemark_emoji_render_tests
-            tests/emoji_render_tests.cpp
-            src/ui/ColorEmojiRenderer.cpp
-            src/ui/EmojiText.cpp
+    add_executable(litemark_status_icon_render_tests
+            tests/status_icon_render_tests.cpp
+            src/ui/StatusIconRenderer.cpp
+            src/ui/StatusIcons.cpp
             src/ui/FontCatalog.cpp
             src/ui/TextLayout.cpp
+            "${LITEMARK_STATUS_ICON_SOURCE}"
+    )
+    target_include_directories(litemark_status_icon_render_tests PRIVATE
+        src
+        ${LITEMARK_GENERATED_DIR}
+    )
+    target_link_libraries(litemark_status_icon_render_tests PRIVATE
+        wxWidgets::core
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_status_icon_render_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
         )
-        target_include_directories(litemark_emoji_render_tests PRIVATE src)
-        target_link_libraries(litemark_emoji_render_tests PRIVATE
-            wxWidgets::core
-            wxWidgets::base
-            d2d1
-            dwrite
-        )
-        if(MINGW)
-            target_link_options(litemark_emoji_render_tests PRIVATE
-                -static
-                -static-libgcc
-                -static-libstdc++
-            )
+    endif()
+    set(LITEMARK_STATUS_ICON_RENDER_TEST_ADDED FALSE)
+    if(UNIX AND NOT APPLE)
+        find_program(XVFB_RUN_EXECUTABLE xvfb-run)
+        if(XVFB_RUN_EXECUTABLE)
+            add_test(NAME status_icon_rendering
+                COMMAND "${XVFB_RUN_EXECUTABLE}" -a
+                    $<TARGET_FILE:litemark_status_icon_render_tests>)
+            set(LITEMARK_STATUS_ICON_RENDER_TEST_ADDED TRUE)
         endif()
-        add_test(NAME color_emoji_rendering
-            COMMAND litemark_emoji_render_tests)
+    else()
+        add_test(NAME status_icon_rendering
+            COMMAND litemark_status_icon_render_tests)
+        set(LITEMARK_STATUS_ICON_RENDER_TEST_ADDED TRUE)
     endif()
 
     add_executable(litemark_document_navigation_tests
@@ -434,6 +486,23 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME workspace_state COMMAND litemark_workspace_state_tests)
 
+    add_executable(litemark_help_path_tests
+        tests/help_path_tests.cpp
+        src/ui/HelpPaths.cpp
+    )
+    target_include_directories(litemark_help_path_tests PRIVATE src)
+    target_link_libraries(litemark_help_path_tests PRIVATE
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_help_path_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME help_path COMMAND litemark_help_path_tests)
+
     if(UNIX AND NOT APPLE)
         add_executable(litemark_image_downloader_tests
             tests/linux_image_downloader_tests.cpp
@@ -479,14 +548,15 @@ if(LITEMARK_BUILD_TESTS)
         file_loading_encoding
         theme_controller
         document_text_selection
-        emoji_text_detection
+        status_icon_detection
         document_navigation
         document_search
         workspace_state
+        help_path
         PROPERTIES LABELS "unit"
     )
-    if(WIN32)
-        set_tests_properties(color_emoji_rendering
+    if(LITEMARK_STATUS_ICON_RENDER_TEST_ADDED)
+        set_tests_properties(status_icon_rendering
             PROPERTIES LABELS "unit")
     endif()
     if(UNIX AND NOT APPLE)

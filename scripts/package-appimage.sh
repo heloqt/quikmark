@@ -92,6 +92,7 @@ desktop_source="${project_root}/packaging/appimage/litemark.desktop"
 icon_source="${project_root}/packaging/appimage/litemark.svg"
 mime_source="${project_root}/packaging/debian/litemark.xml"
 license_source="${project_root}/LICENSE"
+notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
 desktop-file-validate "${desktop_source}"
 
@@ -108,6 +109,7 @@ rm -rf "${appdir}"
 mkdir -p \
     "${appdir}/usr/share/applications" \
     "${appdir}/usr/share/icons/hicolor/scalable/apps" \
+    "${appdir}/usr/share/litemark" \
     "${appdir}/usr/share/mime/packages" \
     "${appdir}/usr/share/doc/litemark"
 
@@ -138,8 +140,14 @@ install -D -m 0644 "${mime_source}" \
     "${appdir}/usr/share/mime/packages/litemark.xml"
 install -D -m 0644 "${license_source}" \
     "${appdir}/usr/share/doc/litemark/LICENSE"
+install -D -m 0644 "${notice_source}" \
+    "${appdir}/usr/share/doc/litemark/THIRD_PARTY_NOTICES.md"
 install -D -m 0644 "${usage_source}" \
     "${appdir}/usr/share/doc/litemark/使用说明.md"
+install -D -m 0644 "${usage_source}" \
+    "${appdir}/usr/share/litemark/使用说明.md"
+install -D -m 0644 "${notice_source}" \
+    "${appdir}/usr/share/litemark/THIRD_PARTY_NOTICES.md"
 
 ln -sfn usr/share/applications/litemark.desktop \
     "${appdir}/litemark.desktop"

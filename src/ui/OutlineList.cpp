@@ -1,7 +1,7 @@
 #include "ui/OutlineList.h"
 
-#include "ui/ColorEmojiRenderer.h"
 #include "ui/FontCatalog.h"
+#include "ui/StatusIconRenderer.h"
 
 #include <wx/dc.h>
 #ifdef __WXMSW__
@@ -85,7 +85,7 @@ void OutlineList::OnDrawItem(wxDC& dc, const wxRect& rect,
         rect.y + (rect.height - dc.GetCharHeight()) / 2;
     dc.SetClippingRegion(rect);
     const int textX = rect.x + FromDIP(10) + indent;
-    if (!detail::DrawEmojiAwareText(
+    if (!detail::DrawStatusIconAwareText(
             dc, item.text, font, palette_.text, textX, textY,
             FromDIP(28))) {
         dc.DrawText(item.text, textX, textY);

@@ -6,10 +6,10 @@
 #include "core/policy/ResourcePolicy.h"
 #include "platform/PerformanceTrace.h"
 #include "ui/BlockLayout.h"
-#include "ui/ColorEmojiRenderer.h"
 #include "ui/DocumentMediaRenderer.h"
-#include "ui/EmojiText.h"
 #include "ui/PendingScroll.h"
+#include "ui/StatusIconRenderer.h"
+#include "ui/StatusIcons.h"
 #include "ui/TableLayout.h"
 #include "ui/TextLayout.h"
 
@@ -49,8 +49,6 @@ using litemark::detail::BuildTableLayout;
 using litemark::detail::BuildTextLayout;
 using litemark::detail::CellLayout;
 using litemark::detail::DocumentMediaRenderer;
-using litemark::detail::EmojiDrawCommand;
-using litemark::detail::EmojiTextRun;
 using litemark::detail::FontMap;
 using litemark::detail::FlowchartLoadedPayload;
 using litemark::detail::ImageLoadedPayload;
@@ -62,6 +60,8 @@ using litemark::detail::LineHeight;
 using litemark::detail::RowLayout;
 using litemark::detail::ScaledPointSize;
 using litemark::detail::Segment;
+using litemark::detail::StatusIconDrawCommand;
+using litemark::detail::StatusIconRun;
 using litemark::detail::TextLayout;
 using litemark::detail::TextStyle;
 using litemark::detail::Utf8CodeUnitAdvance;
@@ -720,7 +720,7 @@ struct DocumentView::Impl {
 
     void DrawPlaceholder(
         wxDC& dc, int scrollX, int scrollY, int clientWidth,
-        std::vector<EmojiDrawCommand>* emojiCommands) {
+        std::vector<StatusIconDrawCommand>* iconCommands) {
         TextStyle titleStyle;
         titleStyle.pointSize = 24;
         titleStyle.bold = true;
@@ -742,10 +742,10 @@ struct DocumentView::Impl {
         const int x = scrollX + 40;
         int y = scrollY + 36;
         DrawTextLayout(dc, title, x, y, false, std::nullopt, nullptr,
-                       nullptr, emojiCommands);
+                       nullptr, iconCommands);
         y += title.height + 18;
         DrawTextLayout(dc, body, x, y, false, std::nullopt, nullptr,
-                       nullptr, emojiCommands);
+                       nullptr, iconCommands);
     }
 
     void DrawTextLayout(wxDC& dc, const TextLayout& text, int baseX,
@@ -759,7 +759,7 @@ struct DocumentView::Impl {
                         const std::optional<std::pair<std::size_t,
                                                       std::size_t>>*
                             activeSearch = nullptr,
-                        std::vector<EmojiDrawCommand>* emojiCommands =
+                        std::vector<StatusIconDrawCommand>* iconCommands =
                             nullptr) {
         const wxColour searchColour =
             SearchHighlightColour(palette, false);
@@ -829,13 +829,12 @@ struct DocumentView::Impl {
                 const wxFont& font = FontFor(segment.style);
                 bool drewText = false;
 #ifdef __WXMSW__
-                if (emojiCommands != nullptr && segment.emoji) {
+                if (iconCommands != nullptr && segment.statusIcon) {
                     dc.SetFont(font);
                     dc.SetTextForeground(textColour);
                     int previousWidth = 0;
-                    for (const EmojiTextRun& run :
-                         litemark::detail::SplitEmojiText(
-                             segment.text)) {
+                    for (const StatusIconRun& run :
+                         litemark::detail::SplitStatusIcons(segment.text)) {
                         const wxString runText = segment.text.Mid(
                             run.begin, run.end - run.begin);
                         const int endWidth =
@@ -844,10 +843,11 @@ struct DocumentView::Impl {
                                 .x;
                         const int runWidth =
                             std::max(0, endWidth - previousWidth);
-                        if (run.emoji) {
-                            EmojiDrawCommand command;
-                            command.text = runText;
-                            command.font = font;
+                        if (run.icon) {
+                            StatusIconDrawCommand command;
+                            command.id = run.id;
+                            command.fallbackText = runText;
+                            command.fallbackFont = font;
                             command.colour = textColour;
                             command.x = segmentX + previousWidth;
                             command.y = lineY;
@@ -859,7 +859,7 @@ struct DocumentView::Impl {
                                 command.clipWidth = clipWidth;
                                 command.clipHeight = clipHeight;
                             }
-                            emojiCommands->push_back(
+                            iconCommands->push_back(
                                 std::move(command));
                         } else {
                             dc.DrawText(runText,
@@ -888,7 +888,7 @@ struct DocumentView::Impl {
 
     void DrawBlock(
         wxDC& dc, const BlockLayout& item,
-        std::vector<EmojiDrawCommand>* emojiCommands) {
+        std::vector<StatusIconDrawCommand>* iconCommands) {
         const Block& block = *item.block;
         const auto selection = SelectionForBlock(item.blockIndex);
         const auto searchRanges = SearchRangesForBlock(item.blockIndex);
@@ -920,11 +920,11 @@ struct DocumentView::Impl {
                 DrawTextLayout(dc, item.text, item.x + padding,
                                item.y + padding, true,
                                selection, searchRangesPtr, activeSearchPtr,
-                               emojiCommands);
+                               iconCommands);
                 break;
             }
             case BlockKind::Table:
-                DrawTable(dc, item, emojiCommands);
+                DrawTable(dc, item, iconCommands);
                 break;
             case BlockKind::Image:
                 media->DrawImage(dc, item, palette, fontScale);
@@ -932,12 +932,12 @@ struct DocumentView::Impl {
             case BlockKind::Flowchart:
                 media->DrawFlowchart(
                     dc, item, palette, fontScale,
-                    [this, emojiCommands](
+                    [this, iconCommands](
                         wxDC& target, const TextLayout& text,
                         int x, int y) {
                         DrawTextLayout(target, text, x, y, false,
                                        std::nullopt, nullptr, nullptr,
-                                       emojiCommands);
+                                       iconCommands);
                     });
                 break;
             default:
@@ -959,7 +959,7 @@ struct DocumentView::Impl {
                 }
                 DrawTextLayout(dc, item.text, item.x, item.y, false,
                                selection, searchRangesPtr, activeSearchPtr,
-                               emojiCommands);
+                               iconCommands);
                 if (block.kind == BlockKind::Heading &&
                     block.headingLevel <= 2) {
                     dc.SetPen(wxPen(palette.border, 1));
@@ -993,7 +993,7 @@ struct DocumentView::Impl {
 
     void DrawTable(
         wxDC& dc, const BlockLayout& item,
-        std::vector<EmojiDrawCommand>* emojiCommands) {
+        std::vector<StatusIconDrawCommand>* iconCommands) {
         if (item.tableRows.empty()) {
             return;
         }
@@ -1033,7 +1033,7 @@ struct DocumentView::Impl {
                 DrawTextLayout(dc, cell.text, cellX + padding,
                                item.y + row.y + padding, false,
                                std::nullopt, nullptr, nullptr,
-                               emojiCommands);
+                               iconCommands);
             }
         }
 
@@ -1642,13 +1642,13 @@ void DocumentView::OnPaint(wxPaintEvent&) {
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.SetBrush(wxBrush(impl_->palette.documentBackground));
     dc.DrawRectangle(scrollX, scrollY, client.x, client.y);
-    std::vector<EmojiDrawCommand> emojiCommands;
+    std::vector<StatusIconDrawCommand> iconCommands;
 
     if (impl_->document == nullptr) {
         SetVirtualSize(client);
         impl_->DrawPlaceholder(dc, scrollX, scrollY, client.x,
-                               &emojiCommands);
-        litemark::detail::DrawColorEmojiBatch(dc, emojiCommands);
+                               &iconCommands);
+        litemark::detail::DrawStatusIconBatch(dc, iconCommands);
         return;
     }
 
@@ -1704,7 +1704,7 @@ void DocumentView::OnPaint(wxPaintEvent&) {
             if (traceEnabled) {
                 drawStart = std::chrono::steady_clock::now();
             }
-            impl_->DrawBlock(dc, blockLayout, &emojiCommands);
+            impl_->DrawBlock(dc, blockLayout, &iconCommands);
             if (drawStart) {
                 drawMicroseconds += static_cast<double>(
                     std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1715,12 +1715,12 @@ void DocumentView::OnPaint(wxPaintEvent&) {
         y += impl_->SlotHeight(impl_->layout->slots[i]);
     }
 
-    if (!emojiCommands.empty()) {
+    if (!iconCommands.empty()) {
         std::optional<std::chrono::steady_clock::time_point> drawStart;
         if (traceEnabled) {
             drawStart = std::chrono::steady_clock::now();
         }
-        litemark::detail::DrawColorEmojiBatch(dc, emojiCommands);
+        litemark::detail::DrawStatusIconBatch(dc, iconCommands);
         if (drawStart) {
             drawMicroseconds += static_cast<double>(
                 std::chrono::duration_cast<std::chrono::microseconds>(

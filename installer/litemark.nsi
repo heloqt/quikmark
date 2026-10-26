@@ -3,7 +3,7 @@ Unicode true
 !include "MUI2.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.0.0"
+  !define APP_VERSION "1.0.1"
 !endif
 !ifndef SOURCE_EXE
   !error "SOURCE_EXE is required"
@@ -16,6 +16,9 @@ Unicode true
 !endif
 !ifndef USAGE_FILE
   !error "USAGE_FILE is required"
+!endif
+!ifndef NOTICE_FILE
+  !error "NOTICE_FILE is required"
 !endif
 
 Name "liteMark"
@@ -78,6 +81,7 @@ Section "liteMark 程序" SEC_MAIN
   SetOutPath "$INSTDIR"
   File "/oname=liteMark.exe" "${SOURCE_EXE}"
   File "${LICENSE_FILE}"
+  File "/oname=THIRD_PARTY_NOTICES.md" "${NOTICE_FILE}"
   File "/oname=使用说明.md" "${USAGE_FILE}"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -135,6 +139,7 @@ FunctionEnd
 Section "Uninstall"
   Delete "$INSTDIR\liteMark.exe"
   Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
   Delete "$INSTDIR\使用说明.md"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"

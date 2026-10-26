@@ -16,6 +16,7 @@ $sourceExe = Join-Path $projectRoot "build\mingw-release-static\bin\litemark.exe
 $makensis = "D:\msys64-33\ucrt64\bin\makensis.exe"
 $script = Join-Path $projectRoot "installer\litemark.nsi"
 $license = Join-Path $projectRoot "LICENSE"
+$notice = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
 $usageFile = Join-Path $projectRoot "build\liteMark-usage.md"
 $distDir = Join-Path $projectRoot "dist"
@@ -30,6 +31,9 @@ if (-not (Test-Path -LiteralPath $sourceExe)) {
 if (-not (Test-Path -LiteralPath $license)) {
     throw "LICENSE file not found."
 }
+if (-not (Test-Path -LiteralPath $notice)) {
+    throw "Third-party notices file not found."
+}
 if (-not (Test-Path -LiteralPath $usageSource)) {
     throw "Usage document not found."
 }
@@ -41,6 +45,7 @@ Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
     "/DAPP_VERSION=$Version" `
     "/DSOURCE_EXE=$sourceExe" `
     "/DLICENSE_FILE=$license" `
+    "/DNOTICE_FILE=$notice" `
     "/DUSAGE_FILE=$usageFile" `
     "/DOUTPUT_FILE=$output" `
     "/INPUTCHARSET" `

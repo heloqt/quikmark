@@ -7,6 +7,7 @@
 #include "platform/PerformanceTrace.h"
 #include "ui/DocumentView.h"
 #include "ui/FontCatalog.h"
+#include "ui/HelpPaths.h"
 #include "ui/OutlineList.h"
 #include "ui/OutlineToggleButton.h"
 #include "ui/TabStrip.h"
@@ -652,25 +653,11 @@ void MainFrame::OnFindClose(wxCommandEvent&) {
 }
 
 void MainFrame::OnHelpUsage(wxCommandEvent&) {
-    const wxFileName executable(
-        wxStandardPaths::Get().GetExecutablePath());
-    const wxString separator(1, wxFileName::GetPathSeparator());
-    wxArrayString candidates;
-    candidates.Add(
-        executable.GetPath() + separator + U8("使用说明.md"));
-    candidates.Add(
-        executable.GetPath() + separator + ".." + separator + ".." +
-        separator + ".." + separator + "doc" + separator +
-        U8("12-使用说明.md"));
-    candidates.Add(
-        wxGetCwd() + separator + "doc" + separator +
-        U8("12-使用说明.md"));
-
+    const auto candidates = detail::UsageDocumentCandidates(
+        wxStandardPaths::Get().GetExecutablePath(), wxGetCwd());
     for (const wxString& candidate : candidates) {
-        wxFileName usage(candidate);
-        usage.Normalize(wxPATH_NORM_DOTS | wxPATH_NORM_ABSOLUTE);
-        if (usage.FileExists() &&
-            wxLaunchDefaultApplication(usage.GetFullPath())) {
+        if (wxFileExists(candidate) &&
+            wxLaunchDefaultApplication(candidate)) {
             return;
         }
     }

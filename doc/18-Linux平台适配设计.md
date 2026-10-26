@@ -480,6 +480,28 @@ dist/litemark_1.0.0_amd64.deb
 该包面向 Ubuntu 22.04 x86-64。包内包含 Markdown MIME 声明和桌面入口，
 应用菜单会通过 XDG 写入当前用户的默认关联。
 
+### 12.6 1.0.1 状态图标发行验证
+
+`1.0.1` 将彩色状态符号改为 36 个内嵌 PNG：
+
+- 图标源图统一为 128×128 RGBA PNG，运行时按 DPI、行高和字体缩放缓存。
+- Windows 和 Linux 共用同一套资源，未知符号回退为系统字体。
+- Linux 帮助文件同时安装到 `/usr/share/litemark/`，避免精简系统排除
+  `/usr/share/doc/*` 后无法从帮助菜单打开。
+- Linux 19/19 测试、Windows 17/17 测试通过。
+
+最终包：
+
+```text
+dist/litemark_1.0.1_amd64.deb
+size: 4,067,506 bytes
+sha256: 60ebfed29ae0548c436152b5de7ec832b60dce9ed15b5ffb15a6f9b2d6e09d16
+
+dist/liteMark-1.0.1-x86_64.AppImage
+size: 37,693,944 bytes
+sha256: ce4a02bb7ae93bd8a84f22d5001d8392d47b31eb3320f6dae152ab9628ec3d5b
+```
+
 ### 12.5 Ubuntu 22.04 AppImage 验证
 
 AppImage 在 Ubuntu 22.04.5 chroot 中构建：
