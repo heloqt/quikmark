@@ -39,6 +39,11 @@ if ($Integration) {
         throw "Table copy regression failed"
     }
     powershell -NoProfile -ExecutionPolicy Bypass `
+        -File .\scripts\help-regression.ps1 -Exe $exe
+    if ($LASTEXITCODE -ne 0) {
+        throw "Help regression failed"
+    }
+    powershell -NoProfile -ExecutionPolicy Bypass `
         -File .\scripts\media-regression.ps1 -Exe $exe
     if ($LASTEXITCODE -ne 0) {
         throw "Media regression failed"

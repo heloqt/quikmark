@@ -44,7 +44,7 @@ public:
     explicit MainFrame(ThemeController& theme, const wxString& workspacePath);
     ~MainFrame() override;
 
-    void OpenPath(const wxString& path);
+    void OpenPath(const wxString& path, bool addToRecent = true);
     void OpenPaths(const wxArrayString& paths);
 
 private:

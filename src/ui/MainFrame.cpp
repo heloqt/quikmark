@@ -171,7 +171,7 @@ MainFrame::~MainFrame() {
     }
 }
 
-void MainFrame::OpenPath(const wxString& path) {
+void MainFrame::OpenPath(const wxString& path, bool addToRecent) {
     SaveCurrentScroll();
     const auto result = tabs_.OpenFile(path);
     UpdateFromTabs();
@@ -181,7 +181,11 @@ void MainFrame::OpenPath(const wxString& path) {
             StartParse(*current);
         }
     }
-    if (const TabSession* current = tabs_.selected()) {
+    if (addToRecent) {
+        const TabSession* current = tabs_.selected();
+        if (current == nullptr) {
+            return;
+        }
         RememberRecentFile(current->path);
     }
 }
@@ -657,8 +661,8 @@ void MainFrame::OnHelpUsage(wxCommandEvent&) {
     const auto candidates = detail::UsageDocumentCandidates(
         wxStandardPaths::Get().GetExecutablePath(), wxGetCwd());
     for (const wxString& candidate : candidates) {
-        if (wxFileExists(candidate) &&
-            wxLaunchDefaultApplication(candidate)) {
+        if (wxFileExists(candidate)) {
+            OpenPath(candidate, false);
             return;
         }
     }
