@@ -31,6 +31,48 @@ std::size_t ClampUtf8Offset(const std::string& text, std::size_t offset) {
     return offset;
 }
 
+std::string TableCellPlainText(const TableCell& cell) {
+    std::string text;
+    AppendSpans(&text, cell.spans);
+    return text;
+}
+
+std::vector<TableCellTextRange> TableCellTextRanges(const Block& block) {
+    std::size_t columnCount = 0;
+    for (const auto& row : block.tableRows) {
+        columnCount = std::max(columnCount, row.size());
+    }
+    if (block.tableRows.empty() || columnCount == 0) {
+        return {};
+    }
+
+    std::vector<TableCellTextRange> ranges(
+        block.tableRows.size() * columnCount);
+    std::size_t offset = 0;
+    for (std::size_t rowIndex = 0;
+         rowIndex < block.tableRows.size(); ++rowIndex) {
+        const auto& row = block.tableRows[rowIndex];
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            TableCellTextRange& range =
+                ranges[rowIndex * columnCount + column];
+            range.begin = offset;
+            range.end = offset;
+            if (column >= row.size()) {
+                continue;
+            }
+            range.end += TableCellPlainText(row[column]).size();
+            offset = range.end;
+            if (column + 1 < row.size()) {
+                ++offset;
+            }
+        }
+        if (rowIndex + 1 < block.tableRows.size()) {
+            ++offset;
+        }
+    }
+    return ranges;
+}
+
 std::string BlockPlainText(const Block& block) {
     switch (block.kind) {
         case BlockKind::Text:
@@ -55,7 +97,7 @@ std::string BlockPlainText(const Block& block) {
                     if (cellIndex > 0) {
                         text.push_back('\t');
                     }
-                    AppendSpans(&text, row[cellIndex].spans);
+                    text += TableCellPlainText(row[cellIndex]);
                 }
             }
             return text;

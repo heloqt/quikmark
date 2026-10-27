@@ -34,6 +34,11 @@ if ($Integration) {
         throw "P2 feature regression failed"
     }
     powershell -NoProfile -ExecutionPolicy Bypass `
+        -File .\scripts\table-copy-regression.ps1 -Exe $exe
+    if ($LASTEXITCODE -ne 0) {
+        throw "Table copy regression failed"
+    }
+    powershell -NoProfile -ExecutionPolicy Bypass `
         -File .\scripts\media-regression.ps1 -Exe $exe
     if ($LASTEXITCODE -ne 0) {
         throw "Media regression failed"

@@ -39,7 +39,8 @@ SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/downloa
 - 本地图片、相对路径图片和 HTTP/HTTPS 网络图片异步加载。
 - 支持 Mermaid flowchart 常用方向、节点、边、边标签和单层子图；不支持的内容显示源码。
 - `http`、`https`、`mailto` 链接使用系统默认应用打开。
-- 支持鼠标跨块选择、纯文本复制、文档内查找、匹配高亮和上下文跳转。
+- 支持鼠标跨块选择、表格单元格文字选择、纯文本复制、文档内查找、匹配高亮和上下文跳转。
+- 表格支持右键“复制整个表格”，同时写入 HTML 表格和 TSV，便于粘贴到 Word、Excel 或纯文本编辑器。
 - 常用快捷键：`Ctrl+O` 打开、`Ctrl+R` 重新加载、`Ctrl+F` 查找、`Ctrl+W` 关闭 Tab、`Ctrl+Tab` / `Ctrl+Shift+Tab` 切换 Tab、`Ctrl+A` / `Ctrl+C` 全选和复制、`F1` 使用说明。
 - 三态目录（隐藏/展开/收起）、固定宽度和分隔线三角把手，标题内部锚点和最多 5 条最近文档。
 - 恢复窗口位置、Tab 顺序、当前 Tab、阅读位置和目录状态。

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace litemark {
 
@@ -17,7 +18,16 @@ struct TextSelectionRange {
     TextSelectionPoint end;
 };
 
+struct TableCellTextRange {
+    std::size_t begin = 0;
+    std::size_t end = 0;
+};
+
 std::size_t ClampUtf8Offset(const std::string& text, std::size_t offset);
+
+std::string TableCellPlainText(const TableCell& cell);
+
+std::vector<TableCellTextRange> TableCellTextRanges(const Block& block);
 
 std::string BlockPlainText(const Block& block);
 

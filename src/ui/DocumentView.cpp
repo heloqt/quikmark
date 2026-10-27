@@ -2,6 +2,7 @@
 
 #include "core/document/DocumentNavigation.h"
 #include "core/document/DocumentText.h"
+#include "core/document/TableClipboard.h"
 #include "core/layout/ListLayout.h"
 #include "core/policy/ResourcePolicy.h"
 #include "platform/PerformanceTrace.h"
@@ -23,6 +24,7 @@
 #include <wx/event.h>
 #include <wx/filename.h>
 #include <wx/font.h>
+#include <wx/menu.h>
 #include <wx/msgdlg.h>
 #ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
@@ -34,6 +36,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -75,6 +78,7 @@ constexpr double kMinFontScale = 0.75;
 constexpr double kMaxFontScale = 2.00;
 constexpr int kImageLoadedEventId = wxID_HIGHEST + 501;
 constexpr int kFlowchartLoadedEventId = wxID_HIGHEST + 502;
+constexpr int kCopyTableMenuId = wxID_HIGHEST + 503;
 #ifdef __WXMSW__
 constexpr UINT kMediaImageCountMessage = WM_APP + 711;
 constexpr UINT kMediaFlowchartCountMessage = WM_APP + 712;
@@ -82,6 +86,25 @@ constexpr UINT kMediaFlowchartCountMessage = WM_APP + 712;
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
+}
+
+wxString ClipboardText(const std::string& text) {
+#ifdef __WXMSW__
+    std::string normalized;
+    normalized.reserve(text.size() + text.size() / 16);
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const char ch = text[index];
+        if (ch == '\n' &&
+            (index == 0 || text[index - 1] != '\r')) {
+            normalized.push_back('\r');
+        }
+        normalized.push_back(ch);
+    }
+    return wxString::FromUTF8(
+        normalized.data(), normalized.size());
+#else
+    return wxString::FromUTF8(text.data(), text.size());
+#endif
 }
 
 bool IsDarkPalette(const litemark::ThemePalette& palette) {
@@ -590,6 +613,99 @@ struct DocumentView::Impl {
                               match.utf8Offset + match.utf8Length);
     }
 
+    std::optional<TextSelectionPoint> HitTestTablePosition(
+        wxDC& dc, BlockLayout& item, const wxPoint& point) {
+        if (item.tableRows.empty()) {
+            return TextSelectionPoint{item.blockIndex, 0};
+        }
+
+        const RowLayout* selectedRow = &item.tableRows.front();
+        const int relativeRowY = point.y - item.y;
+        int closestRowDistance = std::abs(
+            relativeRowY -
+            (selectedRow->y + selectedRow->height / 2));
+        for (const RowLayout& row : item.tableRows) {
+            if (relativeRowY >= row.y &&
+                relativeRowY < row.y + row.height) {
+                selectedRow = &row;
+                break;
+            }
+            const int distance =
+                std::abs(relativeRowY - (row.y + row.height / 2));
+            if (distance < closestRowDistance) {
+                selectedRow = &row;
+                closestRowDistance = distance;
+            }
+        }
+        if (selectedRow->cells.empty()) {
+            return TextSelectionPoint{item.blockIndex, 0};
+        }
+
+        const int padding = std::max(
+            5, static_cast<int>(std::lround(
+                   9 * (dc.GetPPI().x / 96.0))));
+        const int contentX =
+            point.x - item.x + item.tableScrollX - padding;
+        const CellLayout* selectedCell = &selectedRow->cells.front();
+        int closestCellDistance = std::numeric_limits<int>::max();
+        for (const CellLayout& cell : selectedRow->cells) {
+            if (contentX >= cell.x &&
+                contentX < cell.x + cell.width) {
+                selectedCell = &cell;
+                break;
+            }
+            const int distance =
+                contentX < cell.x
+                    ? cell.x - contentX
+                    : contentX - (cell.x + cell.width);
+            if (distance < closestCellDistance) {
+                selectedCell = &cell;
+                closestCellDistance = distance;
+            }
+        }
+        if (selectedCell->sourceLength == 0 ||
+            selectedCell->text.lines.empty()) {
+            return TextSelectionPoint{
+                item.blockIndex, selectedCell->sourceOffset};
+        }
+
+        const int relativeTextY =
+            point.y - (item.y + selectedRow->y + padding);
+        const Line* selectedLine = &selectedCell->text.lines.front();
+        int closestLineDistance = std::abs(
+            relativeTextY - selectedLine->y);
+        for (const Line& line : selectedCell->text.lines) {
+            if (relativeTextY >= line.y &&
+                relativeTextY < line.y + line.height) {
+                selectedLine = &line;
+                break;
+            }
+            const int distance = std::abs(
+                relativeTextY - (line.y + line.height / 2));
+            if (distance < closestLineDistance) {
+                selectedLine = &line;
+                closestLineDistance = distance;
+            }
+        }
+
+        std::size_t localOffset = 0;
+        const int localX = contentX - selectedCell->x;
+        if (!selectedLine->segments.empty()) {
+            localOffset = selectedLine->segments.back().sourceEnd;
+            for (const Segment& segment : selectedLine->segments) {
+                if (localX <= segment.x + segment.width) {
+                    localOffset = SourceOffsetAtX(
+                        dc, segment, localX - segment.x);
+                    break;
+                }
+            }
+        }
+        return TextSelectionPoint{
+            item.blockIndex,
+            selectedCell->sourceOffset +
+                std::min(localOffset, selectedCell->sourceLength)};
+    }
+
     std::optional<TextSelectionPoint> HitTestPosition(
         wxDC& dc, const wxPoint& point) {
         if (!document || document->blocks.empty()) {
@@ -613,6 +729,9 @@ struct DocumentView::Impl {
         BlockLayout& item = LayoutFor(
             dc, blockIndex, blockY, owner->GetClientSize().x);
         const Block& block = *item.block;
+        if (block.kind == BlockKind::Table) {
+            return HitTestTablePosition(dc, item, point);
+        }
         const std::string fullText = BlockPlainText(block);
         const bool textBlock =
             block.kind == BlockKind::Text ||
@@ -924,7 +1043,7 @@ struct DocumentView::Impl {
                 break;
             }
             case BlockKind::Table:
-                DrawTable(dc, item, iconCommands);
+                DrawTable(dc, item, selection, iconCommands);
                 break;
             case BlockKind::Image:
                 media->DrawImage(dc, item, palette, fontScale);
@@ -970,6 +1089,7 @@ struct DocumentView::Impl {
                 break;
         }
         if (selection &&
+            block.kind != BlockKind::Table &&
             block.kind != BlockKind::Text &&
             block.kind != BlockKind::Heading &&
             block.kind != BlockKind::Code &&
@@ -993,6 +1113,7 @@ struct DocumentView::Impl {
 
     void DrawTable(
         wxDC& dc, const BlockLayout& item,
+        const std::optional<std::pair<std::size_t, std::size_t>>& selection,
         std::vector<StatusIconDrawCommand>* iconCommands) {
         if (item.tableRows.empty()) {
             return;
@@ -1030,9 +1151,24 @@ struct DocumentView::Impl {
                     cellX > item.x + item.width) {
                     continue;
                 }
+                std::optional<std::pair<std::size_t, std::size_t>>
+                    cellSelection;
+                if (selection && cell.sourceLength > 0) {
+                    const std::size_t cellEnd =
+                        cell.sourceOffset + cell.sourceLength;
+                    const std::size_t begin =
+                        std::max(selection->first, cell.sourceOffset);
+                    const std::size_t end =
+                        std::min(selection->second, cellEnd);
+                    if (begin < end) {
+                        cellSelection = std::make_pair(
+                            begin - cell.sourceOffset,
+                            end - cell.sourceOffset);
+                    }
+                }
                 DrawTextLayout(dc, cell.text, cellX + padding,
                                item.y + row.y + padding, false,
-                               std::nullopt, nullptr, nullptr,
+                               cellSelection, nullptr, nullptr,
                                iconCommands);
             }
         }
@@ -1102,6 +1238,7 @@ DocumentView::DocumentView(wxWindow* parent)
     Bind(wxEVT_LEFT_DOWN, &DocumentView::OnLeftDown, this);
     Bind(wxEVT_LEFT_UP, &DocumentView::OnLeftUp, this);
     Bind(wxEVT_MOTION, &DocumentView::OnMouseMove, this);
+    Bind(wxEVT_CONTEXT_MENU, &DocumentView::OnContextMenu, this);
     Bind(wxEVT_CHAR_HOOK, &DocumentView::OnCharHook, this);
     Bind(wxEVT_THREAD, &DocumentView::OnImageLoaded, this,
          kImageLoadedEventId);
@@ -1293,9 +1430,35 @@ bool DocumentView::CopySelectionToClipboard() {
     if (text.empty() || !wxTheClipboard->Open()) {
         return false;
     }
-    const wxString wxText = wxString::FromUTF8(text.data(), text.size());
+    const wxString wxText = ClipboardText(text);
     const bool copied =
         wxTheClipboard->SetData(new wxTextDataObject(wxText));
+    wxTheClipboard->Close();
+    if (copied) {
+        wxTheClipboard->Flush();
+    }
+    return copied;
+}
+
+bool DocumentView::CopyTableToClipboard(std::size_t blockIndex) {
+    if (!impl_->document) {
+        return false;
+    }
+    const auto table = BuildTableClipboardData(
+        *impl_->document, blockIndex);
+    if (!table || table->plainText.empty() || table->html.empty() ||
+        !wxTheClipboard->Open()) {
+        return false;
+    }
+
+    auto* data = new wxDataObjectComposite();
+    data->Add(
+        new wxHTMLDataObject(wxString::FromUTF8(
+            table->html.data(), table->html.size())),
+        true);
+    data->Add(new wxTextDataObject(
+        ClipboardText(table->plainText)));
+    const bool copied = wxTheClipboard->SetData(data);
     wxTheClipboard->Close();
     if (copied) {
         wxTheClipboard->Flush();
@@ -1583,6 +1746,43 @@ void DocumentView::OnMouseMove(wxMouseEvent& event) {
         SetCursor(wxCursor(wxCURSOR_HAND));
     }
     event.Skip();
+}
+
+void DocumentView::OnContextMenu(wxContextMenuEvent& event) {
+    if (!impl_->document) {
+        event.Skip();
+        return;
+    }
+
+    wxPoint screenPosition = event.GetPosition();
+    if (screenPosition == wxDefaultPosition) {
+        screenPosition = wxGetMousePosition();
+    }
+    const wxPoint position = ScreenToClient(screenPosition);
+    int contentX = 0;
+    int contentY = 0;
+    CalcUnscrolledPosition(position.x, position.y, &contentX, &contentY);
+    BlockLayout* table =
+        impl_->TableAt(wxPoint(contentX, contentY));
+    if (table == nullptr) {
+        event.Skip();
+        return;
+    }
+
+    const std::size_t blockIndex = table->blockIndex;
+    SetFocus();
+    wxMenu menu;
+    menu.Append(kCopyTableMenuId, U8("复制整个表格"));
+    const int selected =
+        GetPopupMenuSelectionFromUser(menu, position);
+    if (selected != kCopyTableMenuId) {
+        return;
+    }
+    if (!CopyTableToClipboard(blockIndex)) {
+        wxMessageBox(U8("无法将表格复制到剪贴板。"),
+                     U8("复制表格失败"),
+                     wxOK | wxICON_WARNING, this);
+    }
 }
 
 void DocumentView::OnLeftUp(wxMouseEvent& event) {

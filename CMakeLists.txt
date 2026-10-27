@@ -105,6 +105,7 @@ set(LITEMARK_SOURCES
     src/core/document/DocumentNavigation.cpp
     src/core/document/DocumentSearch.cpp
     src/core/document/DocumentText.cpp
+    src/core/document/TableClipboard.cpp
     src/core/parser/MarkdownPrefix.cpp
     src/core/parser/MarkdownParser.cpp
     src/platform/PerformanceTraceCommon.cpp
@@ -386,6 +387,22 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
 
+    add_executable(litemark_table_clipboard_tests
+        tests/table_clipboard_tests.cpp
+        src/core/document/DocumentText.cpp
+        src/core/document/TableClipboard.cpp
+    )
+    target_include_directories(litemark_table_clipboard_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_table_clipboard_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME table_clipboard_export
+        COMMAND litemark_table_clipboard_tests)
+
     add_executable(litemark_status_icon_tests
         tests/status_icon_tests.cpp
         src/ui/StatusIcons.cpp
@@ -570,6 +587,7 @@ if(LITEMARK_BUILD_TESTS)
         file_loading_encoding
         theme_controller
         document_text_selection
+        table_clipboard_export
         status_icon_detection
         document_navigation
         document_search

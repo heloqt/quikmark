@@ -59,6 +59,8 @@ struct CellLayout {
     TextLayout text;
     int x = 0;
     int width = 0;
+    std::size_t sourceOffset = 0;
+    std::size_t sourceLength = 0;
 };
 
 struct RowLayout {

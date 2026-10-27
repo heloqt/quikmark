@@ -1,5 +1,6 @@
 #include "ui/TableLayout.h"
 
+#include "core/document/DocumentText.h"
 #include "ui/TextLayout.h"
 
 #include <wx/string.h>
@@ -160,6 +161,8 @@ void BuildTableLayout(
         columnX[column] =
             columnX[column - 1] + columnWidths[column - 1];
     }
+    const std::vector<litemark::TableCellTextRange> sourceRanges =
+        litemark::TableCellTextRanges(block);
 
     for (std::size_t row = 0; row < rowCount; ++row) {
         RowLayout rowLayout;
@@ -168,6 +171,13 @@ void BuildTableLayout(
             CellLayout cell;
             cell.x = columnX[column];
             cell.width = columnWidths[column];
+            const std::size_t rangeIndex = row * columnCount + column;
+            if (rangeIndex < sourceRanges.size()) {
+                cell.sourceOffset = sourceRanges[rangeIndex].begin;
+                cell.sourceLength =
+                    sourceRanges[rangeIndex].end -
+                    sourceRanges[rangeIndex].begin;
+            }
             TextStyle style;
             style.pointSize = 10;
             style.bold = block.tableFirstRowIsHeader && row == 0;

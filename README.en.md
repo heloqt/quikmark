@@ -57,8 +57,11 @@ SHA256 checksums:
 - Common Mermaid flowchart directions, nodes, edges, edge labels, and
   single-level subgraphs. Unsupported content is displayed as source text.
 - `http`, `https`, and `mailto` links open in the system default application.
-- Cross-block text selection, plain-text copying, in-document search, match
-  highlighting, and context navigation.
+- Cross-block text selection, table-cell text selection, plain-text copying,
+  in-document search, match highlighting, and context navigation.
+- Right-click a table and choose **复制整个表格** (Copy Table) to place both an
+  HTML table and TSV text on the clipboard for Word, Excel, or plain-text
+  editors.
 - Shortcuts: `Ctrl+O` open, `Ctrl+R` reload, `Ctrl+F` find, `Ctrl+W` close tab,
   `Ctrl+Tab` / `Ctrl+Shift+Tab` switch tabs, `Ctrl+A` / `Ctrl+C` select all and
   copy, and `F1` for help.

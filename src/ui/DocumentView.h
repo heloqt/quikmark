@@ -8,6 +8,7 @@
 #include <wx/scrolwin.h>
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +18,7 @@ class wxSizeEvent;
 class wxMouseEvent;
 class wxKeyEvent;
 class wxThreadEvent;
+class wxContextMenuEvent;
 
 namespace litemark {
 
@@ -61,8 +63,10 @@ private:
     void OnLeftDown(wxMouseEvent& event);
     void OnLeftUp(wxMouseEvent& event);
     void OnMouseMove(wxMouseEvent& event);
+    void OnContextMenu(wxContextMenuEvent& event);
     void OnImageLoaded(wxThreadEvent& event);
     void OnFlowchartLoaded(wxThreadEvent& event);
+    bool CopyTableToClipboard(std::size_t blockIndex);
 
     std::unique_ptr<Impl> impl_;
 };

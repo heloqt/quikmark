@@ -60,6 +60,29 @@ void TestPlainBlockText() {
           "table should copy in visual row order");
 }
 
+void TestTableCellTextRanges() {
+    litemark::Block table;
+    table.kind = litemark::BlockKind::Table;
+    table.tableRows = {
+        {{{{"A", false, false, false, false, false, ""}}},
+         {{{"B", false, false, false, false, false, ""}}}},
+        {{{{"你", false, false, false, false, false, ""}}}},
+    };
+
+    const auto ranges = litemark::TableCellTextRanges(table);
+    Check(ranges.size() == 4, "table cell range count mismatch");
+    Check(ranges[0].begin == 0 && ranges[0].end == 1,
+          "first table cell range mismatch");
+    Check(ranges[1].begin == 2 && ranges[1].end == 3,
+          "second table cell range must skip the tab separator");
+    Check(ranges[2].begin == 4 && ranges[2].end == 7,
+          "UTF-8 table cell range mismatch");
+    Check(ranges[3].begin == 7 && ranges[3].end == 7,
+          "missing trailing table cell must be empty");
+    Check(litemark::BlockPlainText(table).size() == 7,
+          "table plain text length mismatch");
+}
+
 void TestPartialSameBlockSelection() {
     const auto document = SampleDocument();
     const auto text = litemark::PlainTextForSelection(
@@ -137,6 +160,7 @@ void TestParagraphFragmentsCopyWithoutInsertedNewline() {
 
 int main() {
     TestPlainBlockText();
+    TestTableCellTextRanges();
     TestPartialSameBlockSelection();
     TestCrossBlockSelection();
     TestReversedSelection();
@@ -148,6 +172,6 @@ int main() {
                   << " check(s) failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "document_text_tests: 7 cases passed\n";
+    std::cout << "document_text_tests: 8 cases passed\n";
     return EXIT_SUCCESS;
 }
