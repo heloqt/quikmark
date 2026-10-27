@@ -1,0 +1,67 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: QuikMark 1.1.0\n"
+"PO-Revision-Date: 2026-10-27 20:00+0800\n"
+"Last-Translator: QuikMark contributors\n"
+"Language-Team: Simplified Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "File"
+msgstr "文件"
+
+msgid "Open..."
+msgstr "打开..."
+
+msgid "Recent Files"
+msgstr "最近打开"
+
+msgid "Reload"
+msgstr "重新加载"
+
+msgid "Register File Associations..."
+msgstr "注册文件关联..."
+
+msgid "Exit"
+msgstr "退出"
+
+msgid "View"
+msgstr "查看"
+
+msgid "Find..."
+msgstr "查找..."
+
+msgid "Appearance"
+msgstr "外观"
+
+msgid "System"
+msgstr "跟随系统"
+
+msgid "Light"
+msgstr "浅色"
+
+msgid "Dark"
+msgstr "深色"
+
+msgid "Language"
+msgstr "语言"
+
+msgid "System language"
+msgstr "跟随系统语言"
+
+msgid "Outline"
+msgstr "目录"
+
+msgid "Help"
+msgstr "帮助"
+
+msgid "Usage Guide"
+msgstr "使用说明"
+
+msgid "About QuikMark"
+msgstr "关于 QuikMark"
+
+msgid "No recent documents"
+msgstr "暂无最近文档"

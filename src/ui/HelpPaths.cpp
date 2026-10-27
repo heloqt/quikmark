@@ -21,23 +21,29 @@ wxString Normalize(const wxString& path) {
 namespace litemark::detail {
 
 std::vector<wxString> UsageDocumentCandidates(
-    const wxString& executablePath, const wxString& currentDirectory) {
+    const wxString& executablePath, const wxString& currentDirectory,
+    const wxString& localeCode) {
     const wxFileName executable(executablePath);
     const wxString executableDirectory = executable.GetPath();
     const wxString separator(1, wxFileName::GetPathSeparator());
+    const bool chinese = localeCode.Lower().StartsWith("zh");
+    const wxString installedName =
+        chinese ? U8("使用说明.md") : "Usage.md";
+    const wxString sourceName =
+        chinese ? U8("12-使用说明.md") : "12-Usage.md";
     std::vector<wxString> candidates = {
-        Normalize(executableDirectory + separator + U8("使用说明.md")),
+        Normalize(executableDirectory + separator + installedName),
         Normalize(executableDirectory + separator + ".." + separator +
-                  "share" + separator + "litemark" + separator +
-                  U8("使用说明.md")),
+                  "share" + separator + "quikmark" + separator +
+                  installedName),
         Normalize(executableDirectory + separator + ".." + separator +
-                  "share" + separator + "doc" + separator + "litemark" +
-                  separator + U8("使用说明.md")),
+                  "share" + separator + "doc" + separator + "quikmark" +
+                  separator + installedName),
         Normalize(executableDirectory + separator + ".." + separator +
                   ".." + separator + ".." + separator + "doc" +
-                  separator + U8("12-使用说明.md")),
+                  separator + sourceName),
         Normalize(currentDirectory + separator + "doc" + separator +
-                  U8("12-使用说明.md")),
+                  sourceName),
     };
     candidates.erase(
         std::unique(candidates.begin(), candidates.end()),

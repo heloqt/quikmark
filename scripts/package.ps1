@@ -18,7 +18,10 @@ $script = Join-Path $projectRoot "installer\quikmark.nsi"
 $license = Join-Path $projectRoot "LICENSE"
 $notice = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
+$usageEnglishSource = Join-Path $projectRoot "doc\12-Usage.md"
 $usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
+$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-Usage.md"
+$localeDir = Join-Path $projectRoot "build\mingw-release-static\bin\locale"
 $distDir = Join-Path $projectRoot "dist"
 $output = Join-Path $distDir "quikmark-$Version-setup.exe"
 
@@ -34,12 +37,15 @@ if (-not (Test-Path -LiteralPath $license)) {
 if (-not (Test-Path -LiteralPath $notice)) {
     throw "Third-party notices file not found."
 }
-if (-not (Test-Path -LiteralPath $usageSource)) {
-    throw "Usage document not found."
+foreach ($required in @($usageSource, $usageEnglishSource, $localeDir)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+        throw "Packaging input not found: $required"
+    }
 }
 
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
+Copy-Item -LiteralPath $usageEnglishSource -Destination $usageEnglishFile -Force
 
 & $makensis `
     "/DAPP_VERSION=$Version" `
@@ -47,6 +53,8 @@ Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
     "/DLICENSE_FILE=$license" `
     "/DNOTICE_FILE=$notice" `
     "/DUSAGE_FILE=$usageFile" `
+    "/DUSAGE_EN_FILE=$usageEnglishFile" `
+    "/DLOCALE_DIR=$localeDir" `
     "/DOUTPUT_FILE=$output" `
     "/INPUTCHARSET" `
     "UTF8" `

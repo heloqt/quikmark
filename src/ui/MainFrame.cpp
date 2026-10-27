@@ -1,6 +1,7 @@
 #include "ui/MainFrame.h"
 
 #include "litemark/Version.h"
+#include "app/LanguageController.h"
 #include "app/ProductInfo.h"
 #include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
@@ -22,6 +23,7 @@
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/fswatcher.h>
+#include <wx/intl.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/sizer.h>
@@ -46,6 +48,10 @@ namespace {
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
+}
+
+wxString T(const char* text) {
+    return wxGetTranslation(U8(text));
 }
 
 struct ParseCompletion {
@@ -87,9 +93,11 @@ private:
 
 namespace litemark {
 
-MainFrame::MainFrame(ThemeController& theme, const wxString& workspacePath)
+MainFrame::MainFrame(ThemeController& theme, LanguageController& language,
+                     const wxString& workspacePath)
     : wxFrame(nullptr, wxID_ANY, U8(kProductName), wxDefaultPosition, wxDefaultSize),
       theme_(theme),
+      language_(language),
       workspaceStore_(std::make_unique<WorkspaceStore>(
           std::filesystem::path(workspacePath.ToStdWstring()))) {
     workspace_ = workspaceStore_->Load();
@@ -291,7 +299,7 @@ void MainFrame::UpdateRecentMenu() {
     }
     if (workspace_.recentFiles.empty()) {
         wxMenuItem* empty =
-            recentMenu_->Append(wxID_NONE, U8("暂无最近文档"));
+            recentMenu_->Append(wxID_NONE, T("No recent documents"));
         empty->Enable(false);
         return;
     }
@@ -405,17 +413,17 @@ void MainFrame::OnFrameSize(wxSizeEvent& event) {
 
 void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
-    fileMenu->Append(wxID_OPEN, U8("打开...\tCtrl+O"));
+    fileMenu->Append(wxID_OPEN, T("Open...") + "\tCtrl+O");
     recentMenu_ = new wxMenu();
-    fileMenu->AppendSubMenu(recentMenu_, U8("最近打开"));
-    fileMenu->Append(ID_RELOAD, U8("重新加载\tCtrl+R"));
+    fileMenu->AppendSubMenu(recentMenu_, T("Recent Files"));
+    fileMenu->Append(ID_RELOAD, T("Reload") + "\tCtrl+R");
     if (IsFileAssociationSupported()) {
         fileMenu->AppendSeparator();
         fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION,
-                         U8("注册文件关联..."));
+                         T("Register File Associations..."));
     }
     fileMenu->AppendSeparator();
-    fileMenu->Append(wxID_EXIT, U8("退出"));
+    fileMenu->Append(wxID_EXIT, T("Exit"));
 
     auto* appearanceMenu = new wxMenu();
     appearanceMenu->AppendRadioItem(ID_APPEARANCE_SYSTEM,
@@ -425,22 +433,35 @@ void MainFrame::CreateMenuBar() {
     appearanceMenu->AppendRadioItem(ID_APPEARANCE_DARK,
                                      ThemeController::DisplayName(ThemeMode::Dark));
 
+    auto* languageMenu = new wxMenu();
+    auto* systemLanguageItem = languageMenu->AppendRadioItem(
+        ID_LANGUAGE_SYSTEM, T("System language"));
+    auto* englishLanguageItem = languageMenu->AppendRadioItem(
+        ID_LANGUAGE_ENGLISH, "English");
+    auto* chineseLanguageItem = languageMenu->AppendRadioItem(
+        ID_LANGUAGE_CHINESE, U8("简体中文"));
+    systemLanguageItem->Check(language_.mode() == LanguageMode::System);
+    englishLanguageItem->Check(language_.mode() == LanguageMode::English);
+    chineseLanguageItem->Check(
+        language_.mode() == LanguageMode::SimplifiedChinese);
+
     auto* viewMenu = new wxMenu();
-    viewMenu->Append(ID_FIND, U8("查找...\tCtrl+F"));
+    viewMenu->Append(ID_FIND, T("Find...") + "\tCtrl+F");
     viewMenu->AppendSeparator();
-    viewMenu->AppendSubMenu(appearanceMenu, U8("外观"));
+    viewMenu->AppendSubMenu(appearanceMenu, T("Appearance"));
+    viewMenu->AppendSubMenu(languageMenu, T("Language"));
     viewMenu->AppendSeparator();
-    viewMenu->AppendCheckItem(ID_OUTLINE, U8("目录"));
+    viewMenu->AppendCheckItem(ID_OUTLINE, T("Outline"));
 
     auto* helpMenu = new wxMenu();
-    helpMenu->Append(ID_HELP_USAGE, U8("使用说明\tF1"));
+    helpMenu->Append(ID_HELP_USAGE, T("Usage Guide") + "\tF1");
     helpMenu->AppendSeparator();
-    helpMenu->Append(ID_ABOUT, U8("关于 QuikMark"));
+    helpMenu->Append(ID_ABOUT, T("About QuikMark"));
 
     auto* menuBar = new wxMenuBar();
-    menuBar->Append(fileMenu, U8("文件"));
-    menuBar->Append(viewMenu, U8("查看"));
-    menuBar->Append(helpMenu, U8("帮助"));
+    menuBar->Append(fileMenu, T("File"));
+    menuBar->Append(viewMenu, T("View"));
+    menuBar->Append(helpMenu, T("Help"));
     SetMenuBar(menuBar);
 
     wxAcceleratorEntry accelerators[7];
@@ -659,7 +680,8 @@ void MainFrame::OnFindClose(wxCommandEvent&) {
 
 void MainFrame::OnHelpUsage(wxCommandEvent&) {
     const auto candidates = detail::UsageDocumentCandidates(
-        wxStandardPaths::Get().GetExecutablePath(), wxGetCwd());
+        wxStandardPaths::Get().GetExecutablePath(), wxGetCwd(),
+        language_.HelpLocaleCode());
     for (const wxString& candidate : candidates) {
         if (wxFileExists(candidate)) {
             OpenPath(candidate, false);
@@ -773,6 +795,8 @@ void MainFrame::BindEvents() {
     Bind(wxEVT_MENU, &MainFrame::OnFindClose, this, ID_FIND_CLOSE);
     Bind(wxEVT_MENU, &MainFrame::OnHelpUsage, this, ID_HELP_USAGE);
     Bind(wxEVT_MENU, &MainFrame::OnAbout, this, ID_ABOUT);
+    Bind(wxEVT_MENU, &MainFrame::OnLanguage, this, ID_LANGUAGE_SYSTEM,
+         ID_LANGUAGE_CHINESE);
     Bind(wxEVT_MENU, &MainFrame::OnCopy, this, wxID_COPY);
     Bind(wxEVT_MENU, &MainFrame::OnSelectAll, this, wxID_SELECTALL);
     Bind(wxEVT_BUTTON, &MainFrame::OnReload, this, ID_RELOAD);
@@ -1331,6 +1355,36 @@ void MainFrame::OnAppearance(wxCommandEvent& event) {
         default:
             break;
     }
+}
+
+void MainFrame::OnLanguage(wxCommandEvent& event) {
+    LanguageMode mode = LanguageMode::System;
+    switch (event.GetId()) {
+        case ID_LANGUAGE_ENGLISH:
+            mode = LanguageMode::English;
+            break;
+        case ID_LANGUAGE_CHINESE:
+            mode = LanguageMode::SimplifiedChinese;
+            break;
+        case ID_LANGUAGE_SYSTEM:
+        default:
+            break;
+    }
+    if (language_.mode() == mode) {
+        return;
+    }
+    language_.SetMode(mode);
+    CallAfter([this]() { RebuildMenuBar(); });
+}
+
+void MainFrame::RebuildMenuBar() {
+    CreateMenuBar();
+    UpdateRecentMenu();
+    UpdateAppearanceMenu();
+    if (auto* outline = GetMenuBar()->FindItem(ID_OUTLINE)) {
+        outline->Check(outlineState_ != OutlineState::Hidden);
+    }
+    Layout();
 }
 
 void MainFrame::OnRecentFile(wxCommandEvent& event) {

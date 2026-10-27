@@ -14,6 +14,7 @@ inline constexpr std::string_view kApplicationVersion{
 
 class MainFrame;
 class IpcServer;
+class LanguageController;
 class SingletonGuard;
 class ThemeController;
 
@@ -30,6 +31,7 @@ private:
 
     std::unique_ptr<SingletonGuard> singleton_;
     std::unique_ptr<IpcServer> ipcServer_;
+    std::unique_ptr<LanguageController> language_;
     std::unique_ptr<ThemeController> theme_;
     MainFrame* frame_ = nullptr;
 };

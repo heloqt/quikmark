@@ -1,5 +1,6 @@
 #include "app/Application.h"
 
+#include "app/LanguageController.h"
 #include "app/ProductInfo.h"
 #include "app/UserData.h"
 #include "platform/IpcServer.h"
@@ -56,12 +57,16 @@ bool Application::OnInit() {
     }
 
     app::MigrateLegacyUserData();
+    language_ = std::make_unique<LanguageController>(
+        app::ConfigFilePath("settings.ini"),
+        wxStandardPaths::Get().GetExecutablePath(),
+        wxGetCwd());
     theme_ = std::make_unique<ThemeController>();
     const wxString workspacePath =
         app::ConfigFilePath("workspace.ini");
     TraceEvent("startup_before_frame",
                static_cast<double>(ProcessAgeMicroseconds()));
-    frame_ = new MainFrame(*theme_, workspacePath);
+    frame_ = new MainFrame(*theme_, *language_, workspacePath);
     TraceEvent("startup_frame",
                static_cast<double>(ProcessAgeMicroseconds()));
     SetTopWindow(frame_);
@@ -92,6 +97,7 @@ int Application::OnExit() {
     ipcServer_.reset();
     frame_ = nullptr;
     theme_.reset();
+    language_.reset();
     singleton_.reset();
     return 0;
 }

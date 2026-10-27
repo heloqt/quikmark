@@ -35,13 +35,13 @@ void TestDisplayNames() {
     using litemark::ThemeController;
     using litemark::ThemeMode;
     Check(ThemeController::DisplayName(ThemeMode::System) ==
-              wxString::FromUTF8("跟随系统"),
+              "System",
           "system display name mismatch");
     Check(ThemeController::DisplayName(ThemeMode::Light) ==
-              wxString::FromUTF8("浅色"),
+              "Light",
           "light display name mismatch");
     Check(ThemeController::DisplayName(ThemeMode::Dark) ==
-              wxString::FromUTF8("深色"),
+              "Dark",
           "dark display name mismatch");
 }
 

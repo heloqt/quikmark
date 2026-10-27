@@ -17,6 +17,12 @@ Unicode true
 !ifndef USAGE_FILE
   !error "USAGE_FILE is required"
 !endif
+!ifndef USAGE_EN_FILE
+  !error "USAGE_EN_FILE is required"
+!endif
+!ifndef LOCALE_DIR
+  !error "LOCALE_DIR is required"
+!endif
 !ifndef NOTICE_FILE
   !error "NOTICE_FILE is required"
 !endif
@@ -95,6 +101,10 @@ Section "QuikMark 程序" SEC_MAIN
   File "${LICENSE_FILE}"
   File "/oname=THIRD_PARTY_NOTICES.md" "${NOTICE_FILE}"
   File "/oname=使用说明.md" "${USAGE_FILE}"
+  File "/oname=Usage.md" "${USAGE_EN_FILE}"
+  SetOutPath "$INSTDIR\locale"
+  File /r "${LOCALE_DIR}\*.*"
+  SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   WriteRegStr HKCU "Software\QuikMark" "InstallDir" "$INSTDIR"
@@ -102,7 +112,7 @@ Section "QuikMark 程序" SEC_MAIN
 
   CreateDirectory "$SMPROGRAMS\QuikMark"
   CreateShortcut "$SMPROGRAMS\QuikMark\QuikMark.lnk" "$INSTDIR\quikmark.exe"
-  CreateShortcut "$SMPROGRAMS\QuikMark\使用说明.lnk" "$INSTDIR\使用说明.md"
+  CreateShortcut "$SMPROGRAMS\QuikMark\使用说明.lnk" "$INSTDIR\quikmark.exe" '"$INSTDIR\使用说明.md"'
   CreateShortcut "$SMPROGRAMS\QuikMark\Uninstall.lnk" "$INSTDIR\uninstall.exe"
 
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QuikMark" "DisplayName" "QuikMark"
@@ -153,7 +163,9 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
   Delete "$INSTDIR\使用说明.md"
+  Delete "$INSTDIR\Usage.md"
   Delete "$INSTDIR\uninstall.exe"
+  RMDir /r "$INSTDIR\locale"
   RMDir "$INSTDIR"
 
   Delete "$SMPROGRAMS\QuikMark\QuikMark.lnk"

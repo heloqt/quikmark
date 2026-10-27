@@ -99,6 +99,7 @@ endif()
 
 set(LITEMARK_SOURCES
     src/app/Application.cpp
+    src/app/LanguageController.cpp
     src/app/main.cpp
     src/app/UserData.cpp
     src/core/flow/Flowchart.cpp
@@ -190,6 +191,13 @@ set_target_properties(litemark PROPERTIES
     OUTPUT_NAME "${LITEMARK_EXECUTABLE_NAME}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
+add_custom_target(litemark_locale ALL
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/locale"
+        "${CMAKE_BINARY_DIR}/bin/locale"
+    COMMENT "Copying QuikMark language catalogs"
+)
+add_dependencies(litemark litemark_locale)
 
 message(STATUS "QuikMark ${PROJECT_VERSION}")
 message(STATUS "wxWidgets 3.3, static=${LITEMARK_STATIC_WX}")
@@ -386,6 +394,28 @@ if(LITEMARK_BUILD_TESTS)
         )
     endif()
     add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
+
+    add_executable(litemark_language_controller_tests
+        tests/language_controller_tests.cpp
+        src/app/LanguageController.cpp
+    )
+    target_include_directories(
+        litemark_language_controller_tests PRIVATE src)
+    target_link_libraries(litemark_language_controller_tests PRIVATE
+        wxWidgets::base
+    )
+    if(MINGW)
+        target_link_options(litemark_language_controller_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME language_controller
+        COMMAND litemark_language_controller_tests)
+    set_tests_properties(language_controller PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
 
     add_executable(litemark_table_clipboard_tests
         tests/table_clipboard_tests.cpp
@@ -587,6 +617,7 @@ if(LITEMARK_BUILD_TESTS)
         file_loading_encoding
         theme_controller
         document_text_selection
+        language_controller
         table_clipboard_export
         status_icon_detection
         document_navigation

@@ -35,13 +35,16 @@ class wxTimerEvent;
 namespace litemark {
 
 class DocumentView;
+class LanguageController;
 class OutlineList;
 class OutlineToggleButton;
 class TabStrip;
 
 class MainFrame : public wxFrame {
 public:
-    explicit MainFrame(ThemeController& theme, const wxString& workspacePath);
+    explicit MainFrame(ThemeController& theme,
+                       LanguageController& language,
+                       const wxString& workspacePath);
     ~MainFrame() override;
 
     void OpenPath(const wxString& path, bool addToRecent = true);
@@ -71,6 +74,9 @@ private:
         ID_SEARCH_COMPLETED,
         ID_HELP_USAGE,
         ID_ABOUT,
+        ID_LANGUAGE_SYSTEM,
+        ID_LANGUAGE_ENGLISH,
+        ID_LANGUAGE_CHINESE,
         ID_CHANGE_TIMER,
         ID_DISMISS_CHANGE,
         ID_PARSE_COMPLETED
@@ -147,6 +153,8 @@ private:
     void OnSearchCompleted(wxThreadEvent& event);
     void OnHelpUsage(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
+    void OnLanguage(wxCommandEvent& event);
+    void RebuildMenuBar();
     void ShowFindBar();
     void HideFindBar();
     void StartSearch();
@@ -154,6 +162,7 @@ private:
     void ShowCurrentSearchMatch();
 
     ThemeController& theme_;
+    LanguageController& language_;
     std::unique_ptr<WorkspaceStore> workspaceStore_;
     WorkspaceState workspace_;
     TabManager tabs_;

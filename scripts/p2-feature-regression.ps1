@@ -180,6 +180,29 @@ function Send-MenuCommand(
     Start-Sleep -Milliseconds 150
 }
 
+function Send-MenuCommandByText(
+    [IntPtr]$Window,
+    [int]$SubmenuPosition,
+    [string[]]$Labels
+) {
+    $menu = [P2RegressionNative]::GetMenu($Window)
+    $submenu = [P2RegressionNative]::GetSubMenu($menu, $SubmenuPosition)
+    $count = [P2RegressionNative]::GetMenuItemCount($submenu)
+    for ($position = 0; $position -lt $count; ++$position) {
+        $label = (Get-MenuText $submenu $position).Split("`t")[0]
+        if ($Labels -contains $label) {
+            $id = [P2RegressionNative]::GetMenuItemID($submenu, $position)
+            if ($id -gt 0) {
+                [void][P2RegressionNative]::SendMessage(
+                    $Window, 0x0111, [IntPtr]$id, [IntPtr]::Zero)
+                Start-Sleep -Milliseconds 150
+                return
+            }
+        }
+    }
+    throw "Could not resolve menu item: $($Labels -join ' / ')"
+}
+
 function Get-MenuText([IntPtr]$Menu, [int]$Position) {
     $text = [Text.StringBuilder]::new(256)
     [void][P2RegressionNative]::GetMenuString(
@@ -478,7 +501,8 @@ try {
             $anchorProcess.MainWindowHandle "▶") -ne [IntPtr]::Zero) {
         throw "Outline toggle was visible before View > Outline was enabled."
     }
-    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
+    Send-MenuCommandByText $anchorProcess.MainWindowHandle 1 `
+        @("目录", "Outline")
     $outlineList = Get-VisibleListBox $anchorProcess.MainWindowHandle
     if ($outlineList -eq $null) {
         throw "Outline list was not visible after opening the drawer."
@@ -564,7 +588,8 @@ try {
     if ($collapsedBodyLoss -lt 10 -or $collapsedBodyLoss -gt 60) {
         throw "Collapsed outline rail width was unexpected: $documentWidthRestored."
     }
-    Send-MenuCommand $anchorProcess.MainWindowHandle 1 4
+    Send-MenuCommandByText $anchorProcess.MainWindowHandle 1 `
+        @("目录", "Outline")
     Start-Sleep -Milliseconds 250
     if ([P2RegressionNative]::IsWindowVisible($outlinePanel)) {
         throw "Unchecking View > Outline did not fully hide the outline."
@@ -594,7 +619,8 @@ try {
         $workspaceProcess.MainWindowHandle, [IntPtr]::Zero,
         80, 70, 1000, 720, 0x0014)
     Start-Sleep -Milliseconds 300
-    Send-MenuCommand $workspaceProcess.MainWindowHandle 1 4
+    Send-MenuCommandByText $workspaceProcess.MainWindowHandle 1 `
+        @("目录", "Outline")
     Start-Sleep -Milliseconds 200
     if ((Get-VisibleListBox $workspaceProcess.MainWindowHandle) -eq $null) {
         throw "Outline was not persistent before saving workspace state."
@@ -687,7 +713,8 @@ $outlineWheelProcess = Start-Process -FilePath $Exe `
 try {
     Wait-Title $outlineWheelProcess "*03-设计文档.md*"
     Start-Sleep -Milliseconds 800
-    Send-MenuCommand $outlineWheelProcess.MainWindowHandle 1 4
+    Send-MenuCommandByText $outlineWheelProcess.MainWindowHandle 1 `
+        @("目录", "Outline")
     $largeOutlineList = Get-VisibleListBox $outlineWheelProcess.MainWindowHandle
     if ($largeOutlineList -eq $null) {
         throw "Large document outline did not open."

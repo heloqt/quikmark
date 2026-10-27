@@ -48,20 +48,25 @@ if ([string]::IsNullOrWhiteSpace($Output)) {
 }
 
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
+$usageEnglishSource = Join-Path $projectRoot "doc\12-Usage.md"
 $usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
+$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-Usage.md"
+$localeDir = Join-Path $projectRoot "build\mingw-release-static\bin\locale"
 $iconFile = Join-Path $projectRoot "build\QuikMark-installer.ico"
 $licenseFile = Join-Path $projectRoot "LICENSE"
 $noticeFile = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $licenseRtf = Join-Path $projectRoot "installer\license-summary.rtf"
 $source = Join-Path $projectRoot "installer\quikmark.wxs"
 foreach ($required in @(
-    $usageSource, $licenseFile, $noticeFile, $licenseRtf, $source
+    $usageSource, $usageEnglishSource, $localeDir,
+    $licenseFile, $noticeFile, $licenseRtf, $source
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required MSI input not found: $required"
     }
 }
 Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
+Copy-Item -LiteralPath $usageEnglishSource -Destination $usageEnglishFile -Force
 
 Add-Type -AssemblyName System.Drawing
 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($Exe)
@@ -86,6 +91,8 @@ try {
     -d "NoticeFile=$noticeFile" `
     -d "LicenseRtf=$licenseRtf" `
     -d "UsageFile=$usageFile" `
+    -d "UsageEnglishFile=$usageEnglishFile" `
+    -d "LocaleDir=$localeDir" `
     -pdbtype none `
     -o $Output `
     $source

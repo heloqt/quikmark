@@ -14,8 +14,9 @@ does not provide editing or saving.
 
 Current version: **1.1.0**
 
-The application interface and bundled usage guide are currently in Simplified
-Chinese. English UI localization is planned for a future release.
+The menu bar and bundled usage guides currently support English and Simplified
+Chinese. Language can be selected under **View > Language** or follow the system
+language. Other interface text will be localized in a later release.
 
 ## Download
 
@@ -70,6 +71,8 @@ SHA256 checksums:
 - Restores window position, tab order, active tab, reading position, outline
   state, theme, and recent documents.
 - System, light, and dark themes.
+- Menu language follows the system by default and can be set to English or
+  Simplified Chinese under **View > Language**.
 - File-change detection with a non-modal reload prompt and single-instance
   operation.
 - Migrates workspace, recent-document, and theme settings from liteMark on the
@@ -79,7 +82,8 @@ SHA256 checksums:
 - Very long paragraphs and oversized tables are split automatically to avoid
   blocking the first view or scrolling.
 
-For detailed usage, see the [usage guide (Chinese)](doc/12-使用说明.md).
+For detailed usage, see the [English usage guide](doc/12-Usage.md) or the
+[Chinese usage guide](doc/12-使用说明.md).
 
 ## Installation and Uninstallation
 
@@ -147,6 +151,10 @@ Build a standalone Release version with static wxWidgets libraries:
 ```
 
 Technology stack: C++17, wxWidgets 3.3, md4c, libcurl, CMake, and MinGW-w64.
+
+Language catalogs live in `assets/locale/`. After editing the Simplified
+Chinese `.po` file, regenerate its `.mo` catalog with `msgfmt`; see
+[Language Packs](assets/locale/README.md).
 
 ## Testing
 
@@ -218,7 +226,8 @@ icon, MIME definitions, and the usage guide. The current binary targets Ubuntu
 
 ## Documentation
 
-- [Usage guide (Chinese)](doc/12-使用说明.md)
+- [English usage guide](doc/12-Usage.md)
+- [Chinese usage guide](doc/12-使用说明.md)
 - [Test matrix (Chinese)](doc/07-单元测试矩阵.md)
 - [Intel Core i5-14500 performance test record (Chinese)](doc/17-Intel-14500性能测试记录.md)
 - [Power mode comparison (Chinese)](doc/10-电源模式性能对比.md)

@@ -17,10 +17,18 @@ if (Get-Process -Name quikmark,liteMark,litemark -ErrorAction SilentlyContinue) 
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class HelpRegressionNative {
+    public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr data);
     [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int position);
     [DllImport("user32.dll")] public static extern int GetMenuItemID(IntPtr menu, int position);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint item, StringBuilder text, int count, uint flags);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, StringBuilder text, int count);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 }
@@ -43,6 +51,31 @@ function Wait-Title(
         Start-Sleep -Milliseconds 25
     }
     throw "Timed out waiting for title '$Pattern'."
+}
+
+function Get-ProcessWindowText([int]$ProcessId) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][HelpRegressionNative]::EnumWindows({
+        param($handle, $unused)
+        if (-not [HelpRegressionNative]::IsWindowVisible($handle)) {
+            return $true
+        }
+        $windowProcess = [uint32]0
+        [void][HelpRegressionNative]::GetWindowThreadProcessId(
+            $handle, [ref]$windowProcess)
+        if ($windowProcess -eq $ProcessId) {
+            $title = [Text.StringBuilder]::new(256)
+            $class = [Text.StringBuilder]::new(128)
+            [void][HelpRegressionNative]::GetWindowText(
+                $handle, $title, $title.Capacity)
+            [void][HelpRegressionNative]::GetClassName(
+                $handle, $class, $class.Capacity)
+            [void]$items.Add(
+                "$($class.ToString()): $($title.ToString())")
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return @($items)
 }
 
 function Reset-TestDirectory([string]$Path) {
@@ -73,6 +106,16 @@ try {
 
     $mainMenu = [HelpRegressionNative]::GetMenu(
         $process.MainWindowHandle)
+    $initialTopMenu = [Text.StringBuilder]::new(128)
+    [void][HelpRegressionNative]::GetMenuString(
+        $mainMenu, 0, $initialTopMenu, $initialTopMenu.Capacity, 0x0400)
+    $systemIsChinese = $initialTopMenu.ToString() -eq "文件"
+    $initialHelpName = if ($systemIsChinese) { "使用说明.md" } else { "Usage.md" }
+    $switchedHelpName = if ($systemIsChinese) { "Usage.md" } else { "使用说明.md" }
+    $languageItemPosition = if ($systemIsChinese) { 1 } else { 2 }
+    $languagePreference = if ($systemIsChinese) { "language=en" } else { "language=zh_CN" }
+    $expectedTopMenu = if ($systemIsChinese) { "File" } else { "文件" }
+
     $helpMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 2)
     $usageCommand = [HelpRegressionNative]::GetMenuItemID($helpMenu, 0)
     if ($usageCommand -le 0) {
@@ -81,7 +124,55 @@ try {
     [void][HelpRegressionNative]::SendMessage(
         $process.MainWindowHandle, 0x0111,
         [IntPtr]$usageCommand, [IntPtr]::Zero)
-    Wait-Title $process "*使用说明.md*"
+    Wait-Title $process "*$initialHelpName*"
+    Start-Sleep -Milliseconds 500
+
+    $mainMenu = [HelpRegressionNative]::GetMenu(
+        $process.MainWindowHandle)
+    $viewMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 1)
+    $languageMenu =
+        [HelpRegressionNative]::GetSubMenu($viewMenu, 3)
+    $languageCommand =
+        [HelpRegressionNative]::GetMenuItemID(
+            $languageMenu, $languageItemPosition)
+    if ($languageCommand -le 0) {
+        throw "Language menu command was not found."
+    }
+    [void][HelpRegressionNative]::SendMessage(
+        $process.MainWindowHandle, 0x0111,
+        [IntPtr]$languageCommand, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 700
+    $process.Refresh()
+    if ($process.HasExited) {
+        throw "QuikMark exited after language switch with code $($process.ExitCode)."
+    }
+
+    $mainMenu = [HelpRegressionNative]::GetMenu(
+        $process.MainWindowHandle)
+    $topMenuText = [Text.StringBuilder]::new(128)
+    [void][HelpRegressionNative]::GetMenuString(
+        $mainMenu, 0, $topMenuText, $topMenuText.Capacity, 0x0400)
+    if ($topMenuText.ToString() -ne $expectedTopMenu) {
+        throw "Menu language did not switch to '$expectedTopMenu'. Got '$topMenuText'."
+    }
+    $helpMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 2)
+    $usageCommand = [HelpRegressionNative]::GetMenuItemID($helpMenu, 0)
+    $helpItemText = [Text.StringBuilder]::new(128)
+    [void][HelpRegressionNative]::GetMenuString(
+        $helpMenu, 0, $helpItemText, $helpItemText.Capacity, 0x0400)
+    if ($usageCommand -le 0 -or
+        $helpItemText.ToString() -notmatch "Usage Guide") {
+        throw "English Usage Guide menu item was not rebuilt correctly."
+    }
+    [void][HelpRegressionNative]::SendMessage(
+        $process.MainWindowHandle, 0x0111,
+        [IntPtr]$usageCommand, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 800
+    $process.Refresh()
+    if ($process.MainWindowTitle -notlike "*$switchedHelpName*") {
+        $windows = Get-ProcessWindowText $process.Id
+        throw "Switched help document did not open. Windows: $($windows -join ' | ')"
+    }
     Start-Sleep -Milliseconds 500
 
     if ((Get-Process -Name quikmark,liteMark,litemark `
@@ -95,7 +186,17 @@ try {
         throw "QuikMark did not exit after closing the test window."
     }
 
-    $workspacePath = Join-Path $configDir "workspace.ini"
+    $configDataDir = Join-Path $configDir "QuikMark"
+    $settingsPath = Join-Path $configDataDir "settings.ini"
+    if (-not (Test-Path -LiteralPath $settingsPath)) {
+        throw "Language preference was not saved."
+    }
+    $settings = Get-Content -LiteralPath $settingsPath -Raw
+    if ($settings -notmatch [regex]::Escape($languagePreference)) {
+        throw "Language preference '$languagePreference' was not saved."
+    }
+
+    $workspacePath = Join-Path $configDataDir "workspace.ini"
     if (Test-Path -LiteralPath $workspacePath) {
         $workspace = Get-Content -LiteralPath $workspacePath -Raw
         if ($workspace -match "recent\.count=([1-9][0-9]*)") {
@@ -103,8 +204,29 @@ try {
         }
     }
 
+    $process = Start-Process -FilePath $Exe -PassThru
+    Wait-Title $process "*QuikMark*"
+    Start-Sleep -Milliseconds 500
+    $mainMenu = [HelpRegressionNative]::GetMenu(
+        $process.MainWindowHandle)
+    $topMenuText = [Text.StringBuilder]::new(128)
+    [void][HelpRegressionNative]::GetMenuString(
+        $mainMenu, 0, $topMenuText, $topMenuText.Capacity, 0x0400)
+    if ($topMenuText.ToString() -ne $expectedTopMenu) {
+        throw "Persisted menu language was not restored. Got '$topMenuText'."
+    }
+    if (-not $process.CloseMainWindow()) {
+        throw "Restarted QuikMark did not accept a normal close."
+    }
+    if (-not $process.WaitForExit(5000)) {
+        throw "Restarted QuikMark did not exit."
+    }
+
     [pscustomobject]@{
-        HelpTab = "PASS"
+        InitialHelpTab = $initialHelpName
+        SwitchedHelpTab = $switchedHelpName
+        MenuLanguage = $expectedTopMenu
+        LanguagePersistence = "PASS"
         SingleInstance = "PASS"
         RecentDocuments = "PASS"
         Result = "PASS"

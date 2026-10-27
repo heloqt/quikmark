@@ -28,7 +28,13 @@
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="QuikMark" />
+        <Directory Id="INSTALLFOLDER" Name="QuikMark">
+          <Directory Id="LocaleFolder" Name="locale">
+            <Directory Id="ChineseLocaleFolder" Name="zh_CN">
+              <Directory Id="ChineseLcMessagesFolder" Name="LC_MESSAGES" />
+            </Directory>
+          </Directory>
+        </Directory>
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
@@ -51,6 +57,9 @@
         <File Id="UsageFile"
               Source="$(var.UsageFile)"
               Name="使用说明.md" />
+        <File Id="UsageEnglishFile"
+              Source="$(var.UsageEnglishFile)"
+              Name="Usage.md" />
         <RemoveFolder Id="RemoveInstallFolder"
                       Directory="INSTALLFOLDER"
                       On="uninstall" />
@@ -77,7 +86,8 @@
         <Shortcut Id="StartMenuUsage"
                   Name="使用说明"
                   Description="打开 QuikMark 使用说明"
-                  Target="[INSTALLFOLDER]使用说明.md"
+                  Target="[INSTALLFOLDER]quikmark.exe"
+                  Arguments="&quot;[INSTALLFOLDER]使用说明.md&quot;"
                   WorkingDirectory="INSTALLFOLDER" />
         <Shortcut Id="StartMenuUninstall"
                   Name="卸载 QuikMark"
@@ -89,6 +99,29 @@
         <RegistryValue Root="HKCU"
                        Key="Software\QuikMark"
                        Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+
+      <Component Id="ChineseLocale"
+                 Directory="ChineseLcMessagesFolder"
+                 Guid="BBA485CE-2D11-47A0-A597-1B41577E7397">
+        <File Id="ChineseCatalog"
+              Source="$(var.LocaleDir)\zh_CN\LC_MESSAGES\quikmark.mo"
+              Name="quikmark.mo" />
+        <RemoveFolder Id="RemoveChineseLcMessages"
+                      Directory="ChineseLcMessagesFolder"
+                      On="uninstall" />
+        <RemoveFolder Id="RemoveChineseLocale"
+                      Directory="ChineseLocaleFolder"
+                      On="uninstall" />
+        <RemoveFolder Id="RemoveLocaleFolder"
+                      Directory="LocaleFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\QuikMark"
+                       Name="ChineseLocale"
                        Type="integer"
                        Value="1"
                        KeyPath="yes" />

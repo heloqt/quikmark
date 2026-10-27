@@ -4,6 +4,7 @@
 
 #include <wx/fileconf.h>
 #include <wx/filename.h>
+#include <wx/intl.h>
 #include <wx/settings.h>
 #include <wx/stdpaths.h>
 
@@ -56,13 +57,13 @@ void ThemeController::Refresh() {
 wxString ThemeController::DisplayName(ThemeMode mode) {
     switch (mode) {
         case ThemeMode::System:
-            return wxString::FromUTF8("跟随系统");
+            return wxGetTranslation("System");
         case ThemeMode::Light:
-            return wxString::FromUTF8("浅色");
+            return wxGetTranslation("Light");
         case ThemeMode::Dark:
-            return wxString::FromUTF8("深色");
+            return wxGetTranslation("Dark");
     }
-    return wxString::FromUTF8("跟随系统");
+    return wxGetTranslation("System");
 }
 
 ThemeMode ThemeController::ParseMode(const wxString& value) {

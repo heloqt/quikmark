@@ -70,6 +70,8 @@ mime_source="${project_root}/packaging/debian/quikmark.xml"
 license_source="${project_root}/LICENSE"
 notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
+usage_en_source="${project_root}/doc/12-Usage.md"
+locale_source="${project_root}/assets/locale/zh_CN/LC_MESSAGES/quikmark.mo"
 
 rm -rf "${stage}"
 mkdir -p \
@@ -79,6 +81,7 @@ mkdir -p \
     "${stage}/usr/share/applications" \
     "${stage}/usr/share/doc/quikmark" \
     "${stage}/usr/share/quikmark" \
+    "${stage}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES" \
     "${stage}/usr/share/mime/packages"
 
 install -m 0755 "${exe}" "${stage}/usr/bin/quikmark"
@@ -108,8 +111,14 @@ install -m 0644 "${notice_source}" \
     "${stage}/usr/share/doc/quikmark/THIRD_PARTY_NOTICES.md"
 install -m 0644 "${usage_source}" \
     "${stage}/usr/share/doc/quikmark/使用说明.md"
+install -m 0644 "${usage_en_source}" \
+    "${stage}/usr/share/doc/quikmark/Usage.md"
 install -m 0644 "${usage_source}" \
     "${stage}/usr/share/quikmark/使用说明.md"
+install -m 0644 "${usage_en_source}" \
+    "${stage}/usr/share/quikmark/Usage.md"
+install -m 0644 "${locale_source}" \
+    "${stage}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES/quikmark.mo"
 install -m 0644 "${notice_source}" \
     "${stage}/usr/share/quikmark/THIRD_PARTY_NOTICES.md"
 desktop-file-validate \
