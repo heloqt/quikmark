@@ -19,20 +19,20 @@ Linux:
 - Install the Debian package with:
 
   ```bash
-  sudo apt install ./quikmark_1.1.0_amd64.deb
+  sudo apt install ./quikmark_1.2.0_amd64.deb
   ```
 
 - Make the AppImage executable before running it:
 
   ```bash
-  chmod +x QuikMark-1.1.0-x86_64.AppImage
-  ./QuikMark-1.1.0-x86_64.AppImage
+  chmod +x QuikMark-1.2.0-x86_64.AppImage
+  ./QuikMark-1.2.0-x86_64.AppImage
   ```
 
 - If FUSE is unavailable:
 
   ```bash
-  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.1.0-x86_64.AppImage
+  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.0-x86_64.AppImage
   ```
 
 - AppImage does not change the default Markdown application automatically.

@@ -2,30 +2,52 @@
 
 # QuikMark
 
-QuikMark 是一个原生、轻量的 Markdown 阅读器。快速打开，专注阅读，
-不提供编辑功能，不依赖 Chromium 或浏览器内核。
+QuikMark 是一个使用 C++（wxWidgets）构建的原生、轻量 Markdown 阅读器。
+快速打开，专注阅读，不提供编辑功能。
 
-> 性能摘要：150 KB 文档冷启动约 150–200 ms，热打开约 20 ms，Tab 切换约 10–20 ms；10 MB 文档首屏约 180 ms，剩余内容在后台继续解析（Intel Core i5-14500、Windows 11、平衡电源模式实测）。
+它不使用 Electron，也不依赖 Chromium 或其他浏览器内核。
 
-当前版本：**1.1.0**
+当前版本：**1.2.0**
+
+## 性能
+
+表中数据为 P50 / P95，单位为毫秒，测试环境为 Windows 11、平衡电源模式。
+
+| 场景 | AMD Ryzen 7 8845HS | Intel Core i5-14500 |
+| --- | ---: | ---: |
+| 150 KB 冷启动 | 284.701 / 314.635 | 156.676 / 191.805 |
+| 150 KB 运行中打开 | 20.746 / 25.393 | 15.438 / 19.875 |
+| 150 KB Tab 切换 | 7.228 / 10.326 | 4.677 / 6.497 |
+| 10 MB 冷启动首屏 | 325.682 / 328.849 | 173.757 / 180.478 |
+| 10 MB 运行中打开 | 17.888 / 30.918 | 20.228 / 21.123 |
+| 10 MB Tab 切换 | 46.857 / 58.629 | 19.801 / 20.763 |
+| 10 MB 独立滚动 | 4.289 / 7.110 | 3.218 / 8.339 |
+
+AMD 测试机安装的软件和安全组件较多，系统使用时间也较长，因此两组数据不作为严格的
+硬件对比。10 MB 冷启动首屏的计时在首屏可见时结束，剩余内容会在后台继续处理。
+独立滚动表示滚轮消息处理耗时，不等同于完整帧渲染耗时。
+
+详细数据见
+[Intel Core i5-14500 性能测试记录](doc/17-Intel-14500性能测试记录.md)和
+[电源模式性能对比](doc/10-电源模式性能对比.md)。
 
 ## 下载
 
 项目主页：[Gitee](https://gitee.com/heloqt/quikmark) |
 [GitHub](https://github.com/heloqt/quikmark)
 
-发布页面：[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0) |
-[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.1.0)
+发布页面：[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.0) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.0)
 
 | 平台 | 安装包 | 大小 | 下载 |
 | --- | --- | --- | --- |
-| Windows 10/11 x64 | `quikmark-1.1.0-setup.exe` | 4.15 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) |
-| Windows 10/11 x64 | `quikmark-1.1.0-x64.msi` | 4.34 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) |
-| Ubuntu 22.04+ x64 | `quikmark_1.1.0_amd64.deb` | 3.88 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) |
-| Linux x86-64 | `QuikMark-1.1.0-x86_64.AppImage` | 35.95 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) |
+| Windows 10/11 x64 | `quikmark-1.2.0-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.2.0-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.2.0_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.2.0-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) |
 
-SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt) /
-[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)
+SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt)
 
 ## 功能
 
@@ -67,12 +89,12 @@ Windows：
 Linux：
 
 - `.deb` 面向 Ubuntu 22.04 x86-64 及兼容的新发行版，可用
-  `sudo apt install ./quikmark_1.1.0_amd64.deb` 安装。
+  `sudo apt install ./quikmark_1.2.0_amd64.deb` 安装。
 - `.deb` 安装后程序入口为 `quikmark`，使用说明位于
   `/usr/share/quikmark/使用说明.md`。
-- AppImage 使用前需要执行 `chmod +x QuikMark-1.1.0-x86_64.AppImage`；
+- AppImage 使用前需要执行 `chmod +x QuikMark-1.2.0-x86_64.AppImage`；
   系统没有 FUSE 2 时可执行
-  `APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.1.0-x86_64.AppImage`。
+  `APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.0-x86_64.AppImage`。
 - AppImage 不会自动抢占 Markdown 默认打开方式；需要时在
   “文件 > 注册文件关联...”中启用。
 

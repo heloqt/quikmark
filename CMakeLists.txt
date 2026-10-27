@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(QuikMark VERSION 1.1.0 LANGUAGES CXX)
+project(QuikMark VERSION 1.2.0 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)

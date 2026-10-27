@@ -527,6 +527,27 @@ size: 37,698,040 bytes
 sha256: a4c9da4a1f889886a3a5e6bfb010295fc0aa25dd465a293b74590b81ce90bc30
 ```
 
+### 12.8 QuikMark 1.2.0 Linux 发行验证
+
+QuikMark 1.2.0 在 Ubuntu 22.04.5 x86-64 chroot 中构建：
+
+- Linux 单元测试 22/22 通过。
+- `.deb` 解包依赖检查及 Xvfb 启动冒烟通过。
+- AppImage 内置 Xvfb 启动冒烟通过。
+- 安装包包含中英文使用说明、中文菜单语言包和 wxWidgets 中文标准目录。
+
+最终包：
+
+```text
+dist/quikmark_1.2.0_amd64.deb
+size: 4,148,046 bytes
+sha256: 3044db3648f025ca68fbe9aa44957ac2213bdfd7e8bc57a157d20aaaa5145c0c
+
+dist/QuikMark-1.2.0-x86_64.AppImage
+size: 37,771,768 bytes
+sha256: fdc173c95c74e50d917c2321ee150865083752796bdeef0afa80a409243cc14a
+```
+
 ### 12.5 Ubuntu 22.04 AppImage 验证
 
 AppImage 在 Ubuntu 22.04.5 chroot 中构建：

@@ -2,21 +2,42 @@
 
 # QuikMark
 
-QuikMark is a native, lightweight Markdown reader built for fast, focused
-reading. It does not depend on Chromium or a browser engine and intentionally
-does not provide editing or saving.
+QuikMark is a native, lightweight Markdown reader built with C++
+(wxWidgets). It opens quickly, focuses on reading, and intentionally does not
+provide editing.
 
-> Performance summary: a 150 KB document cold-starts in roughly 150–200 ms,
-> opens as a subsequent document in about 20 ms, and switches tabs in about
-> 10–20 ms. A 10 MB document displays its first view in about 180 ms while the
-> remaining content is parsed in the background. Measured on an Intel
-> Core i5-14500 running Windows 11 in Balanced power mode.
+It does not use Electron or depend on Chromium or another browser engine.
 
-Current version: **1.1.0**
+Current version: **1.2.0**
 
 The application UI and bundled usage guides support English and Simplified
 Chinese. Language can be selected under **View > Language** or follow the
 system language.
+
+## Performance
+
+All figures are P50 / P95 values in milliseconds, measured on Windows 11 in
+Balanced power mode.
+
+| Scenario | AMD Ryzen 7 8845HS | Intel Core i5-14500 |
+| --- | ---: | ---: |
+| 150 KB cold start | 284.701 / 314.635 | 156.676 / 191.805 |
+| 150 KB hot open | 20.746 / 25.393 | 15.438 / 19.875 |
+| 150 KB tab switch | 7.228 / 10.326 | 4.677 / 6.497 |
+| 10 MB cold start, first screen | 325.682 / 328.849 | 173.757 / 180.478 |
+| 10 MB hot open | 17.888 / 30.918 | 20.228 / 21.123 |
+| 10 MB tab switch | 46.857 / 58.629 | 19.801 / 20.763 |
+| 10 MB isolated scroll | 4.289 / 7.110 | 3.218 / 8.339 |
+
+The AMD machine has more installed software and security components and a
+longer-used OS installation, so the figures are not a strict hardware
+comparison. The 10 MB cold-start measurement ends when the first screen is
+visible; remaining content continues in the background. Isolated scroll is
+wheel-message processing time, not complete frame-rendering time.
+
+See the detailed
+[Intel Core i5-14500 performance test record](doc/17-Intel-14500性能测试记录.md)
+and [power mode comparison](doc/10-电源模式性能对比.md).
 
 ## Download
 
@@ -25,19 +46,19 @@ Project home:
 [GitHub](https://github.com/heloqt/quikmark)
 
 Releases:
-[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.1.0) |
-[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.1.0)
+[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.0) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.0)
 
 | Platform | Package | Size | Download |
 | --- | --- | --- | --- |
-| Windows 10/11 x64 | `quikmark-1.1.0-setup.exe` | 4.15 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-setup.exe) |
-| Windows 10/11 x64 | `quikmark-1.1.0-x64.msi` | 4.34 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark-1.1.0-x64.msi) |
-| Ubuntu 22.04+ x64 | `quikmark_1.1.0_amd64.deb` | 3.88 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/quikmark_1.1.0_amd64.deb) |
-| Linux x86-64 | `QuikMark-1.1.0-x86_64.AppImage` | 35.95 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/QuikMark-1.1.0-x86_64.AppImage) |
+| Windows 10/11 x64 | `quikmark-1.2.0-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.2.0-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.2.0_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.2.0-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) |
 
 SHA256 checksums:
-[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt) /
-[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.1.0/SHA256-1.1.0.txt)
+[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt)
 
 ## Features
 
@@ -104,7 +125,7 @@ The `.deb` package targets Ubuntu 22.04 x86-64 and compatible newer
 distributions:
 
 ```bash
-sudo apt install ./quikmark_1.1.0_amd64.deb
+  sudo apt install ./quikmark_1.2.0_amd64.deb
 ```
 
 - After installation, the executable is `quikmark`, and the usage guide is at
@@ -112,14 +133,14 @@ sudo apt install ./quikmark_1.1.0_amd64.deb
 - Make the AppImage executable before running it:
 
   ```bash
-  chmod +x QuikMark-1.1.0-x86_64.AppImage
-  ./QuikMark-1.1.0-x86_64.AppImage
+  chmod +x QuikMark-1.2.0-x86_64.AppImage
+  ./QuikMark-1.2.0-x86_64.AppImage
   ```
 
 - If FUSE 2 is unavailable, run the AppImage with:
 
   ```bash
-  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.1.0-x86_64.AppImage
+  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.0-x86_64.AppImage
   ```
 
 - AppImage does not automatically become the default Markdown application.

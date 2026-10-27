@@ -3,7 +3,7 @@ Unicode true
 !include "MUI2.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.1.0"
+  !define APP_VERSION "1.2.0"
 !endif
 !ifndef SOURCE_EXE
   !error "SOURCE_EXE is required"
