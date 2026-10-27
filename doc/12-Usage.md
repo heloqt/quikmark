@@ -101,7 +101,7 @@ interface compact, but their shortcuts remain available.
 | `Ctrl+A` | Select the whole document |
 | `Ctrl+C` | Copy the selection as plain text |
 
-Right-click a table and choose **复制整个表格** (Copy Table) to place both:
+Right-click a table and choose **Copy Table** to place both:
 
 - an HTML table, which pastes into Word as a table
 - TSV text, which pastes into Excel, WPS, or a plain-text editor
