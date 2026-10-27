@@ -1,6 +1,7 @@
 #include "app/Application.h"
 
 #include "app/LanguageController.h"
+#include "app/Localization.h"
 #include "app/ProductInfo.h"
 #include "app/UserData.h"
 #include "platform/IpcServer.h"
@@ -44,23 +45,24 @@ bool Application::OnInit() {
         }
     }
 
+    app::MigrateLegacyUserData();
+    language_ = std::make_unique<LanguageController>(
+        app::ConfigFilePath("settings.ini"),
+        wxStandardPaths::Get().GetExecutablePath(),
+        wxGetCwd());
+
     singleton_ = std::make_unique<SingletonGuard>(
         "QuikMark.SingleInstance.Mutex");
     if (!singleton_->IsPrimary()) {
         if (!SendOpenRequestToPrimary(paths)) {
-            wxMessageBox(wxString::FromUTF8(
-                             "无法连接正在运行的 QuikMark 实例。"),
+            wxMessageBox(Tr("Unable to communicate with the running "
+                            "QuikMark instance."),
                          kProductName, wxOK | wxICON_ERROR);
         }
         CallAfter([this]() { ExitMainLoop(); });
         return true;
     }
 
-    app::MigrateLegacyUserData();
-    language_ = std::make_unique<LanguageController>(
-        app::ConfigFilePath("settings.ini"),
-        wxStandardPaths::Get().GetExecutablePath(),
-        wxGetCwd());
     theme_ = std::make_unique<ThemeController>();
     const wxString workspacePath =
         app::ConfigFilePath("workspace.ini");

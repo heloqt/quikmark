@@ -1,5 +1,6 @@
 #include "ui/DocumentMediaRenderer.h"
 
+#include "app/Localization.h"
 #include "core/policy/ResourcePolicy.h"
 #include "platform/ImageDownloader.h"
 #include "ui/TextLayout.h"
@@ -631,7 +632,7 @@ void DocumentMediaRenderer::BuildImageLayout(
         impl_->ResolveImageSource(block.imagePath);
     if (!source.valid) {
         item.placeholderText =
-            U8("图片不可用\n") +
+            Tr("Image unavailable") + "\n" +
             (block.imageAlt.empty()
                  ? wxString::FromUTF8(block.imagePath)
                  : wxString::FromUTF8(block.imageAlt));
@@ -646,11 +647,11 @@ void DocumentMediaRenderer::BuildImageLayout(
         item.placeholderText =
             impl_->failedImages.find(source.key) !=
                     impl_->failedImages.end()
-                ? U8("图片加载失败\n") +
+                ? Tr("Image failed to load") + "\n" +
                       (block.imageAlt.empty()
                            ? wxString::FromUTF8(block.imagePath)
                            : wxString::FromUTF8(block.imageAlt))
-                : U8("正在加载图片…");
+                : Tr("Loading image...");
         item.height = static_cast<int>(std::lround(120 * scale));
         return;
     }
@@ -708,7 +709,7 @@ void DocumentMediaRenderer::BuildFlowchartLayout(
     if (found == impl_->flowcharts.end()) {
         impl_->RequestFlowchart(block.flowSource);
         item.placeholderText =
-            U8("正在解析 Mermaid flowchart…");
+            Tr("Parsing Mermaid flowchart...");
         item.height = static_cast<int>(std::lround(150 * scale));
         return;
     }

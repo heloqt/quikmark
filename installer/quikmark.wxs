@@ -110,6 +110,9 @@
         <File Id="ChineseCatalog"
               Source="$(var.LocaleDir)\zh_CN\LC_MESSAGES\quikmark.mo"
               Name="quikmark.mo" />
+        <File Id="WxWidgetsChineseCatalog"
+              Source="$(var.LocaleDir)\zh_CN\LC_MESSAGES\wxstd-3.3.mo"
+              Name="wxstd-3.3.mo" />
         <RemoveFolder Id="RemoveChineseLcMessages"
                       Directory="ChineseLcMessagesFolder"
                       On="uninstall" />

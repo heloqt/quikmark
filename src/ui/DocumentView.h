@@ -48,6 +48,7 @@ public:
                           int activeIndex);
     void ClearSearchMatches();
     void ApplyTheme(const ThemePalette& palette);
+    void RefreshLanguage();
 
 private:
     struct Impl;

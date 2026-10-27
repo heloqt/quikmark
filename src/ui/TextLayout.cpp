@@ -2,16 +2,13 @@
 #include "ui/FontCatalog.h"
 #include "ui/StatusIcons.h"
 
+#include "app/Localization.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
 #include <utility>
 
 namespace {
-
-wxString U8(const char* text) {
-    return wxString::FromUTF8(text);
-}
 
 int BreakPosition(const wxString& text, int fit) {
     if (fit <= 0) {
@@ -208,8 +205,8 @@ void BuildTextLayout(wxDC& dc, TextLayout& layout, int maxWidth,
         sourceCursor += sourceSpan.text.size();
         wxString text = wxString::FromUTF8(sourceSpan.text);
         if (sourceSpan.image) {
-            text = text.empty() ? U8("[图片]")
-                                : U8("[图片: ") + text + U8("]");
+            text = text.empty() ? Tr("[Image]")
+                                : Tr("[Image: ") + text + "]";
         }
         if (text.empty()) {
             continue;

@@ -2,6 +2,7 @@
 
 #include "litemark/Version.h"
 #include "app/LanguageController.h"
+#include "app/Localization.h"
 #include "app/ProductInfo.h"
 #include "core/document/DocumentSearch.h"
 #include "core/parser/MarkdownParser.h"
@@ -48,10 +49,6 @@ namespace {
 
 wxString U8(const char* text) {
     return wxString::FromUTF8(text);
-}
-
-wxString T(const char* text) {
-    return wxGetTranslation(U8(text));
 }
 
 struct ParseCompletion {
@@ -111,18 +108,19 @@ MainFrame::MainFrame(ThemeController& theme, LanguageController& language,
     changeBanner_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
                                 FromDIP(wxSize(-1, 40)));
     changeText_ = new wxStaticText(
-        changeBanner_, wxID_ANY, U8("文件已在外部修改"),
+        changeBanner_, wxID_ANY, Tr("File changed externally"),
         wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
-    auto* reloadButton = new wxButton(
-        changeBanner_, ID_RELOAD, U8("重新加载"), wxDefaultPosition,
+    changeReloadButton_ = new wxButton(
+        changeBanner_, ID_RELOAD, Tr("Reload"), wxDefaultPosition,
         wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
-    auto* dismissButton = new wxButton(
-        changeBanner_, ID_DISMISS_CHANGE, U8("稍后"), wxDefaultPosition,
+    changeDismissButton_ = new wxButton(
+        changeBanner_, ID_DISMISS_CHANGE, Tr("Later"), wxDefaultPosition,
         wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
     auto* bannerSizer = new wxBoxSizer(wxHORIZONTAL);
     bannerSizer->Add(changeText_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(14));
-    bannerSizer->Add(reloadButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
-    bannerSizer->Add(dismissButton, 0,
+    bannerSizer->Add(changeReloadButton_, 0,
+                     wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+    bannerSizer->Add(changeDismissButton_, 0,
                      wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(8));
     changeBanner_->SetSizer(bannerSizer);
     changeBanner_->Hide();
@@ -299,7 +297,7 @@ void MainFrame::UpdateRecentMenu() {
     }
     if (workspace_.recentFiles.empty()) {
         wxMenuItem* empty =
-            recentMenu_->Append(wxID_NONE, T("No recent documents"));
+            recentMenu_->Append(wxID_NONE, Tr("No recent documents"));
         empty->Enable(false);
         return;
     }
@@ -413,17 +411,17 @@ void MainFrame::OnFrameSize(wxSizeEvent& event) {
 
 void MainFrame::CreateMenuBar() {
     auto* fileMenu = new wxMenu();
-    fileMenu->Append(wxID_OPEN, T("Open...") + "\tCtrl+O");
+    fileMenu->Append(wxID_OPEN, Tr("Open...") + "\tCtrl+O");
     recentMenu_ = new wxMenu();
-    fileMenu->AppendSubMenu(recentMenu_, T("Recent Files"));
-    fileMenu->Append(ID_RELOAD, T("Reload") + "\tCtrl+R");
+    fileMenu->AppendSubMenu(recentMenu_, Tr("Recent Files"));
+    fileMenu->Append(ID_RELOAD, Tr("Reload") + "\tCtrl+R");
     if (IsFileAssociationSupported()) {
         fileMenu->AppendSeparator();
         fileMenu->Append(ID_REGISTER_FILE_ASSOCIATION,
-                         T("Register File Associations..."));
+                         Tr("Register File Associations..."));
     }
     fileMenu->AppendSeparator();
-    fileMenu->Append(wxID_EXIT, T("Exit"));
+    fileMenu->Append(wxID_EXIT, Tr("Exit"));
 
     auto* appearanceMenu = new wxMenu();
     appearanceMenu->AppendRadioItem(ID_APPEARANCE_SYSTEM,
@@ -435,7 +433,7 @@ void MainFrame::CreateMenuBar() {
 
     auto* languageMenu = new wxMenu();
     auto* systemLanguageItem = languageMenu->AppendRadioItem(
-        ID_LANGUAGE_SYSTEM, T("System language"));
+        ID_LANGUAGE_SYSTEM, Tr("System language"));
     auto* englishLanguageItem = languageMenu->AppendRadioItem(
         ID_LANGUAGE_ENGLISH, "English");
     auto* chineseLanguageItem = languageMenu->AppendRadioItem(
@@ -446,22 +444,22 @@ void MainFrame::CreateMenuBar() {
         language_.mode() == LanguageMode::SimplifiedChinese);
 
     auto* viewMenu = new wxMenu();
-    viewMenu->Append(ID_FIND, T("Find...") + "\tCtrl+F");
+    viewMenu->Append(ID_FIND, Tr("Find...") + "\tCtrl+F");
     viewMenu->AppendSeparator();
-    viewMenu->AppendSubMenu(appearanceMenu, T("Appearance"));
-    viewMenu->AppendSubMenu(languageMenu, T("Language"));
+    viewMenu->AppendSubMenu(appearanceMenu, Tr("Appearance"));
+    viewMenu->AppendSubMenu(languageMenu, Tr("Language"));
     viewMenu->AppendSeparator();
-    viewMenu->AppendCheckItem(ID_OUTLINE, T("Outline"));
+    viewMenu->AppendCheckItem(ID_OUTLINE, Tr("Outline"));
 
     auto* helpMenu = new wxMenu();
-    helpMenu->Append(ID_HELP_USAGE, T("Usage Guide") + "\tF1");
+    helpMenu->Append(ID_HELP_USAGE, Tr("Usage Guide") + "\tF1");
     helpMenu->AppendSeparator();
-    helpMenu->Append(ID_ABOUT, T("About QuikMark"));
+    helpMenu->Append(ID_ABOUT, Tr("About QuikMark"));
 
     auto* menuBar = new wxMenuBar();
-    menuBar->Append(fileMenu, T("File"));
-    menuBar->Append(viewMenu, T("View"));
-    menuBar->Append(helpMenu, T("Help"));
+    menuBar->Append(fileMenu, Tr("File"));
+    menuBar->Append(viewMenu, Tr("View"));
+    menuBar->Append(helpMenu, Tr("Help"));
     SetMenuBar(menuBar);
 
     wxAcceleratorEntry accelerators[7];
@@ -479,11 +477,12 @@ void MainFrame::CreateMenuBar() {
 void MainFrame::CreateFindBar() {
     findBar_ = new wxPanel(this, wxID_ANY, wxDefaultPosition,
                            FromDIP(wxSize(-1, 38)));
-    auto* label = new wxStaticText(findBar_, wxID_ANY, U8("查找"));
+    findCaption_ =
+        new wxStaticText(findBar_, wxID_ANY, Tr("Find"));
     findText_ = new wxTextCtrl(
         findBar_, ID_FIND_TEXT, wxString(), wxDefaultPosition,
         FromDIP(wxSize(300, -1)), wxTE_PROCESS_ENTER);
-    findText_->SetHint(U8("输入要查找的内容"));
+    findText_->SetHint(Tr("Search text"));
     auto* previous = new wxButton(
         findBar_, ID_FIND_PREVIOUS, U8("↑"), wxDefaultPosition,
         wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
@@ -491,14 +490,15 @@ void MainFrame::CreateFindBar() {
         findBar_, ID_FIND_NEXT, U8("↓"), wxDefaultPosition,
         wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
     findStatus_ = new wxStaticText(
-        findBar_, wxID_ANY, U8("输入内容后开始查找"),
+        findBar_, wxID_ANY, Tr("Type to search"),
         wxDefaultPosition, FromDIP(wxSize(150, -1)), wxST_ELLIPSIZE_END);
     auto* close = new wxButton(
         findBar_, ID_FIND_CLOSE, U8("×"), wxDefaultPosition,
         wxDefaultSize, wxBU_EXACTFIT | wxBORDER_NONE);
 
     auto* sizer = new wxBoxSizer(wxHORIZONTAL);
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(12));
+    sizer->Add(findCaption_, 0,
+               wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(12));
     sizer->Add(findText_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
     sizer->Add(previous, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(6));
     sizer->Add(next, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
@@ -567,19 +567,19 @@ void MainFrame::StartSearch() {
     documentView_->ClearSearchMatches();
 
     if (query.empty()) {
-        findStatus_->SetLabel(U8("输入内容后开始查找"));
+        findStatus_->SetLabel(Tr("Type to search"));
         return;
     }
     const TabSession* current = tabs_.selected();
     if (current == nullptr || !current->document) {
-        findStatus_->SetLabel(U8("当前文档尚未就绪"));
+        findStatus_->SetLabel(Tr("Current document is not ready"));
         return;
     }
 
     const auto document = current->document;
     const std::uint64_t tabId = current->id;
     const std::uint64_t generation = current->generation;
-    findStatus_->SetLabel(U8("查找中…"));
+    findStatus_->SetLabel(Tr("Searching..."));
     auto task = std::make_unique<SearchTask>();
     task->cancelled = std::make_shared<std::atomic_bool>(false);
     const auto cancelled = task->cancelled;
@@ -604,14 +604,14 @@ void MainFrame::StartSearch() {
 void MainFrame::ShowCurrentSearchMatch() {
     if (searchMatches_.empty() || searchMatchIndex_ < 0) {
         documentView_->ClearSearchMatches();
-        findStatus_->SetLabel(U8("无结果"));
+        findStatus_->SetLabel(Tr("No results"));
         return;
     }
     documentView_->SetSearchMatches(searchMatches_, searchMatchIndex_);
     wxString status = wxString::Format(
         "%d / %zu", searchMatchIndex_ + 1, searchMatches_.size());
     if (searchResultTruncated_) {
-        status += U8("（已截断）");
+        status += " " + Tr("(truncated)");
     }
     findStatus_->SetLabel(status);
 }
@@ -630,7 +630,7 @@ void MainFrame::OnFindText(wxCommandEvent&) {
     searchMatches_.clear();
     searchMatchIndex_ = -1;
     documentView_->ClearSearchMatches();
-    findStatus_->SetLabel(U8("等待输入…"));
+    findStatus_->SetLabel(Tr("Waiting for input..."));
     findTimer_.StartOnce(140);
 }
 
@@ -688,8 +688,8 @@ void MainFrame::OnHelpUsage(wxCommandEvent&) {
             return;
         }
     }
-    wxMessageBox(U8("找不到使用说明。请重新安装 QuikMark。"),
-                 U8("使用说明"), wxOK | wxICON_WARNING, this);
+    wxMessageBox(Tr("Usage guide not found. Please reinstall QuikMark."),
+                 Tr("Usage Guide"), wxOK | wxICON_WARNING, this);
 }
 
 void MainFrame::OnAbout(wxCommandEvent&) {
@@ -697,8 +697,8 @@ void MainFrame::OnAbout(wxCommandEvent&) {
     info.SetName(kProductName);
     info.SetVersion(wxString::FromUTF8(LITEMARK_VERSION_STRING));
     info.SetDescription(
-        U8("原生、轻量的 Markdown 阅读器\n"
-           "快速打开，专注阅读，不提供编辑功能\n\n构建：") +
+        Tr("Native, lightweight Markdown reader\n"
+           "Fast opening, focused reading, no editing\n\nBuild: ") +
         wxString::FromUTF8(LITEMARK_BUILD_TYPE) + "\n" +
         wxString::Format("wxWidgets %s", wxVERSION_STRING));
     info.SetCopyright(U8("Copyright © 2026 QuikMark contributors"));
@@ -737,7 +737,7 @@ void MainFrame::CreateOutlinePanel() {
         wxBORDER_NONE);
 
     outlineTitle_ =
-        new wxStaticText(outlineContentPanel_, wxID_ANY, U8("目录"));
+        new wxStaticText(outlineContentPanel_, wxID_ANY, Tr("Outline"));
     wxFont titleFont(wxFontInfo(11).FaceName(UiFaceName()));
     titleFont.SetWeight(wxFONTWEIGHT_BOLD);
     outlineTitle_->SetFont(titleFont);
@@ -747,7 +747,8 @@ void MainFrame::CreateOutlinePanel() {
 
     outlineList_ = new OutlineList(outlineContentPanel_, ID_OUTLINE_LIST);
     outlineEmptyText_ = new wxStaticText(
-        outlineContentPanel_, wxID_ANY, U8("当前文档没有标题"),
+        outlineContentPanel_, wxID_ANY,
+        Tr("This document has no headings"),
         wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
     outlineEmptyText_->Hide();
 
@@ -911,14 +912,17 @@ void MainFrame::UpdateFromTabs() {
             documentView_->SetDocument(current->document, current->path,
                                        current->scrollY);
         } else if (current->loadState == DocumentLoadState::Failed) {
+            const wxScopedCharBuffer parseError =
+                current->parseError.ToUTF8();
             documentView_->ShowMessage(
-                U8("无法显示文档"),
-                current->parseError.empty() ? U8("Markdown 解析失败")
-                                            : current->parseError);
+                Tr("Unable to display document"),
+                current->parseError.empty() ? Tr("Markdown parsing failed")
+                                            : Tr(parseError.data()));
         } else {
             documentView_->ShowMessage(
-                U8("正在解析"),
-                current->title + U8("\n\nMarkdown 文档正在后台解析。"));
+                Tr("Parsing"),
+                current->title + "\n\n" +
+                    Tr("Markdown document is being parsed in the background."));
         }
         SetTitle(current->title + U8(" - QuikMark"));
     }
@@ -931,7 +935,7 @@ void MainFrame::UpdateFromTabs() {
         searchMatchIndex_ = -1;
         searchResultTruncated_ = false;
         documentView_->ClearSearchMatches();
-        findStatus_->SetLabel(U8("查找中…"));
+        findStatus_->SetLabel(Tr("Searching..."));
         findTimer_.StartOnce(30);
     }
 }
@@ -948,7 +952,8 @@ void MainFrame::UpdateChangeBanner() {
     changeBanner_->Show(show);
     if (show) {
         changeText_->SetLabel(
-            current->title + U8(" 已在外部修改，是否重新加载？"));
+            current->title + " " +
+            Tr("was changed externally. Reload?"));
         changeBanner_->Layout();
     }
 }
@@ -1003,7 +1008,7 @@ void MainFrame::StartParse(const TabSession& tab) {
             } catch (const std::exception& exception) {
                 error = wxString::FromUTF8(exception.what());
             } catch (...) {
-                error = U8("未知的 Markdown 解析错误");
+                error = Tr("Unknown Markdown parsing error");
             }
             const auto parseFinished = std::chrono::steady_clock::now();
             const double parseMicroseconds = static_cast<double>(
@@ -1064,7 +1069,8 @@ void MainFrame::OnParseCompleted(wxThreadEvent& event) {
     const TabSession* current = tabs_.selected();
     if (!result.document && current != nullptr && current->document &&
         !result.error.empty()) {
-        wxMessageBox(result.error, U8("Markdown 解析失败"),
+        const wxScopedCharBuffer errorUtf8 = result.error.ToUTF8();
+        wxMessageBox(Tr(errorUtf8.data()), Tr("Markdown parsing failed"),
                      wxOK | wxICON_WARNING, this);
     }
     if (current != nullptr && current->id == result.tabId) {
@@ -1280,8 +1286,9 @@ void MainFrame::CloseTab(int index) {
 
 void MainFrame::OnOpen(wxCommandEvent&) {
     wxFileDialog dialog(
-        this, U8("打开 Markdown 文档"), wxString(), wxString(),
-        U8("Markdown 文档 (*.md;*.markdown)|*.md;*.markdown|所有文件 (*.*)|*.*"),
+        this, Tr("Open Markdown Document"), wxString(), wxString(),
+        Tr("Markdown Documents (*.md;*.markdown)|*.md;*.markdown|"
+           "All Files (*.*)|*.*"),
         wxFD_OPEN | wxFD_FILE_MUST_EXIST | wxFD_MULTIPLE);
     if (dialog.ShowModal() != wxID_OK) {
         return;
@@ -1304,7 +1311,9 @@ void MainFrame::OnReload(wxCommandEvent&) {
     }
     wxString error;
     if (tabs_.ReloadSelected(&error) == TabOpenResult::Failed) {
-        wxMessageBox(error, U8("重新加载失败"), wxOK | wxICON_ERROR, this);
+        const wxScopedCharBuffer errorUtf8 = error.ToUTF8();
+        wxMessageBox(Tr(errorUtf8.data()), Tr("Reload failed"),
+                     wxOK | wxICON_ERROR, this);
         return;
     }
     if (const TabSession* current = tabs_.selected()) {
@@ -1321,19 +1330,23 @@ void MainFrame::OnCloseTab(wxCommandEvent&) {
 
 void MainFrame::OnRegisterFileAssociation(wxCommandEvent&) {
     const int answer = wxMessageBox(
-        U8("将 QuikMark 注册为 .md 和 .markdown 文件的打开方式？\n"
-           "该操作只修改当前用户的文件关联。"),
-        U8("注册文件关联"), wxYES_NO | wxICON_QUESTION, this);
+        Tr("Register QuikMark as the opener for .md and .markdown files?\n"
+           "This only changes the current user's file associations."),
+        Tr("Register File Associations"),
+        wxYES_NO | wxICON_QUESTION, this);
     if (answer != wxYES) {
         return;
     }
 
     wxString error;
     if (!RegisterLiteMarkFileAssociations(&error)) {
-        wxMessageBox(error, U8("注册失败"), wxOK | wxICON_ERROR, this);
+        const wxScopedCharBuffer errorUtf8 = error.ToUTF8();
+        wxMessageBox(Tr(errorUtf8.data()), Tr("Registration failed"),
+                     wxOK | wxICON_ERROR, this);
         return;
     }
-    wxMessageBox(U8("文件关联注册完成。"), U8("QuikMark"),
+    wxMessageBox(Tr("File association registration completed."),
+                 U8(kProductName),
                  wxOK | wxICON_INFORMATION, this);
 }
 
@@ -1383,6 +1396,54 @@ void MainFrame::RebuildMenuBar() {
     UpdateAppearanceMenu();
     if (auto* outline = GetMenuBar()->FindItem(ID_OUTLINE)) {
         outline->Check(outlineState_ != OutlineState::Hidden);
+    }
+    RefreshLocalizedUi();
+    Layout();
+}
+
+void MainFrame::RefreshLocalizedUi() {
+    if (changeReloadButton_ != nullptr) {
+        changeReloadButton_->SetLabel(Tr("Reload"));
+    }
+    if (changeDismissButton_ != nullptr) {
+        changeDismissButton_->SetLabel(Tr("Later"));
+    }
+    if (findCaption_ != nullptr) {
+        findCaption_->SetLabel(Tr("Find"));
+    }
+    if (findText_ != nullptr) {
+        findText_->SetHint(Tr("Search text"));
+    }
+    if (outlineTitle_ != nullptr) {
+        outlineTitle_->SetLabel(Tr("Outline"));
+    }
+    if (outlineEmptyText_ != nullptr) {
+        outlineEmptyText_->SetLabel(
+            Tr("This document has no headings"));
+    }
+    if (outlineToggleButton_ != nullptr) {
+        outlineToggleButton_->SetExpanded(
+            outlineState_ == OutlineState::Expanded);
+    }
+
+    const TabSession* current = tabs_.selected();
+    if (current == nullptr) {
+        documentView_->ShowPlaceholder();
+        SetTitle(U8(kProductName));
+    } else if (current->document) {
+        documentView_->RefreshLanguage();
+        SetTitle(current->title + " - " + U8(kProductName));
+    } else {
+        UpdateFromTabs();
+    }
+    UpdateChangeBanner();
+
+    if (findStatus_ != nullptr) {
+        if (findText_ == nullptr || findText_->GetValue().empty()) {
+            findStatus_->SetLabel(Tr("Type to search"));
+        } else if (findBar_ != nullptr && findBar_->IsShown()) {
+            StartSearch();
+        }
     }
     Layout();
 }

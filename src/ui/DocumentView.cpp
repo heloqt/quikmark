@@ -1,5 +1,6 @@
 #include "ui/DocumentView.h"
 
+#include "app/Localization.h"
 #include "core/document/DocumentNavigation.h"
 #include "core/document/DocumentText.h"
 #include "core/document/TableClipboard.h"
@@ -183,9 +184,9 @@ struct DocumentView::Impl {
     FontMap fonts;
     std::map<const MarkdownDocument*, LayoutCacheEntry> layoutCache;
     wxString messageTitle = U8("QuikMark");
-    wxString messageBody = U8(
-        "这是一个只读 Markdown 阅读器。\n"
-        "使用“文件 > 打开”或把 Markdown 文件拖入窗口。");
+    wxString messageBody = Tr(
+        "A read-only Markdown reader.\n"
+        "Use File > Open or drag a Markdown file into the window.");
     BlockLayout* tableDrag = nullptr;
     std::optional<std::chrono::steady_clock::time_point> scrollRequestedAt;
     std::vector<PendingPaintTrace> pendingPaintTraces;
@@ -1278,10 +1279,10 @@ void DocumentView::ShowPlaceholder() {
     impl_->activeSearchMatch = -1;
     impl_->media->SetBasePath({});
     impl_->messageTitle = U8("QuikMark");
-    impl_->messageBody = U8(
-        "原生、轻量的 Markdown 阅读器。\n"
-        "快速打开，专注阅读，不提供编辑功能。\n"
-        "使用“文件 > 打开”或将 Markdown 文件拖入窗口。");
+    impl_->messageBody = Tr(
+        "Native, lightweight Markdown reader.\n"
+        "Fast opening, focused reading, no editing.\n"
+        "Use File > Open or drag a Markdown file into the window.");
     impl_->layoutDirty = true;
     impl_->pendingScrollY.Request(0);
     impl_->pendingReadingAnchor.reset();
@@ -1540,6 +1541,20 @@ void DocumentView::ApplyTheme(const ThemePalette& palette) {
     Refresh();
 }
 
+void DocumentView::RefreshLanguage() {
+    if (!impl_->document) {
+        ShowPlaceholder();
+        return;
+    }
+    if (const auto anchor = impl_->CaptureReadingAnchor()) {
+        impl_->pendingReadingAnchor = anchor;
+    }
+    impl_->layoutCache.clear();
+    impl_->layout.reset();
+    impl_->layoutDirty = true;
+    Refresh(false);
+}
+
 void DocumentView::OnSize(wxSizeEvent& event) {
     impl_->tableDrag = nullptr;
     if (event.GetSize().x != impl_->layoutWidth) {
@@ -1772,15 +1787,15 @@ void DocumentView::OnContextMenu(wxContextMenuEvent& event) {
     const std::size_t blockIndex = table->blockIndex;
     SetFocus();
     wxMenu menu;
-    menu.Append(kCopyTableMenuId, U8("复制整个表格"));
+    menu.Append(kCopyTableMenuId, Tr("Copy Table"));
     const int selected =
         GetPopupMenuSelectionFromUser(menu, position);
     if (selected != kCopyTableMenuId) {
         return;
     }
     if (!CopyTableToClipboard(blockIndex)) {
-        wxMessageBox(U8("无法将表格复制到剪贴板。"),
-                     U8("复制表格失败"),
+        wxMessageBox(Tr("Unable to copy the table to the clipboard."),
+                     Tr("Copy Table Failed"),
                      wxOK | wxICON_WARNING, this);
     }
 }
@@ -1814,8 +1829,10 @@ void DocumentView::OnLeftUp(wxMouseEvent& event) {
         } else {
             const ExternalLinkResult result = OpenExternalLink(href);
             if (result == ExternalLinkResult::Failed) {
-                wxMessageBox(U8("无法调用系统默认应用打开该链接。"),
-                             U8("打开链接失败"), wxOK | wxICON_WARNING, this);
+                wxMessageBox(
+                    Tr("Unable to open this link with the system default "
+                       "application."),
+                    Tr("Open Link Failed"), wxOK | wxICON_WARNING, this);
             }
         }
         Refresh(false);

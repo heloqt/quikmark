@@ -1,10 +1,10 @@
 #include "ui/ThemeController.h"
 
+#include "app/Localization.h"
 #include "app/UserData.h"
 
 #include <wx/fileconf.h>
 #include <wx/filename.h>
-#include <wx/intl.h>
 #include <wx/settings.h>
 #include <wx/stdpaths.h>
 
@@ -57,13 +57,13 @@ void ThemeController::Refresh() {
 wxString ThemeController::DisplayName(ThemeMode mode) {
     switch (mode) {
         case ThemeMode::System:
-            return wxGetTranslation("System");
+            return Tr("System");
         case ThemeMode::Light:
-            return wxGetTranslation("Light");
+            return Tr("Light");
         case ThemeMode::Dark:
-            return wxGetTranslation("Dark");
+            return Tr("Dark");
     }
-    return wxGetTranslation("System");
+    return Tr("System");
 }
 
 ThemeMode ThemeController::ParseMode(const wxString& value) {

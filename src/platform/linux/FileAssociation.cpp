@@ -1,5 +1,6 @@
 #include "platform/FileAssociation.h"
 
+#include "app/Localization.h"
 #include <wx/arrstr.h>
 #include <wx/file.h>
 #include <wx/filefn.h>
@@ -56,14 +57,14 @@ bool WriteUtf8File(const wxString& path, const wxString& content,
     wxFile file;
     if (!file.Open(path, wxFile::write)) {
         if (error != nullptr) {
-            *error = "无法写入文件：" + path;
+            *error = litemark::Tr("Unable to write file: ") + path;
         }
         return false;
     }
     const wxScopedCharBuffer utf8 = content.ToUTF8();
     if (file.Write(utf8.data(), utf8.length()) != utf8.length()) {
         if (error != nullptr) {
-            *error = "写入文件失败：" + path;
+            *error = litemark::Tr("Failed to write file: ") + path;
         }
         return false;
     }
@@ -86,7 +87,9 @@ bool RunTool(const wxArrayString& command, wxString* error) {
     if (wxExecute(arguments.data(),
                   wxEXEC_SYNC | wxEXEC_HIDE_CONSOLE) != 0) {
         if (error != nullptr) {
-            *error = "执行桌面关联命令失败：" + command[0];
+            *error = litemark::Tr(
+                         "Desktop association command failed: ") +
+                     command[0];
         }
         return false;
     }
@@ -104,7 +107,8 @@ bool IsFileAssociationSupported() {
 bool RegisterLiteMarkFileAssociations(wxString* error) {
     if (!HasAssociationTools()) {
         if (error != nullptr) {
-            *error = "缺少 xdg-mime 或 MIME/桌面数据库更新工具。";
+            *error = litemark::Tr(
+                "xdg-mime or a MIME/desktop database update tool is missing.");
         }
         return false;
     }
@@ -118,7 +122,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     if (!applicationsDir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL) ||
         !mimeDir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL)) {
         if (error != nullptr) {
-            *error = "无法创建用户级桌面数据目录。";
+            *error = litemark::Tr(
+                "Unable to create the user desktop data directory.");
         }
         return false;
     }

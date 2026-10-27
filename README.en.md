@@ -14,9 +14,9 @@ does not provide editing or saving.
 
 Current version: **1.1.0**
 
-The menu bar and bundled usage guides currently support English and Simplified
-Chinese. Language can be selected under **View > Language** or follow the system
-language. Other interface text will be localized in a later release.
+The application UI and bundled usage guides support English and Simplified
+Chinese. Language can be selected under **View > Language** or follow the
+system language.
 
 ## Download
 

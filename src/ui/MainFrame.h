@@ -22,6 +22,7 @@ class wxCommandEvent;
 class wxCloseEvent;
 class wxKeyEvent;
 class wxBoxSizer;
+class wxButton;
 class wxFileSystemWatcherEvent;
 class wxMenu;
 class wxPanel;
@@ -155,6 +156,7 @@ private:
     void OnAbout(wxCommandEvent& event);
     void OnLanguage(wxCommandEvent& event);
     void RebuildMenuBar();
+    void RefreshLocalizedUi();
     void ShowFindBar();
     void HideFindBar();
     void StartSearch();
@@ -173,7 +175,10 @@ private:
     DocumentView* documentView_ = nullptr;
     wxPanel* changeBanner_ = nullptr;
     wxStaticText* changeText_ = nullptr;
+    wxButton* changeReloadButton_ = nullptr;
+    wxButton* changeDismissButton_ = nullptr;
     wxPanel* findBar_ = nullptr;
+    wxStaticText* findCaption_ = nullptr;
     wxTextCtrl* findText_ = nullptr;
     wxStaticText* findStatus_ = nullptr;
     wxPanel* outlinePanel_ = nullptr;

@@ -21,6 +21,7 @@ using System.Text;
 public static class HelpRegressionNative {
     public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr data);
+    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr data);
     [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr menu, int position);
     [DllImport("user32.dll")] public static extern int GetMenuItemID(IntPtr menu, int position);
@@ -30,6 +31,7 @@ public static class HelpRegressionNative {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 }
 '@
@@ -72,6 +74,51 @@ function Get-ProcessWindowText([int]$ProcessId) {
                 $handle, $class, $class.Capacity)
             [void]$items.Add(
                 "$($class.ToString()): $($title.ToString())")
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return @($items)
+}
+
+function Get-ProcessWindows([int]$ProcessId) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][HelpRegressionNative]::EnumWindows({
+        param($handle, $unused)
+        if (-not [HelpRegressionNative]::IsWindowVisible($handle)) {
+            return $true
+        }
+        $windowProcess = [uint32]0
+        [void][HelpRegressionNative]::GetWindowThreadProcessId(
+            $handle, [ref]$windowProcess)
+        if ($windowProcess -eq $ProcessId) {
+            $title = [Text.StringBuilder]::new(256)
+            $class = [Text.StringBuilder]::new(128)
+            [void][HelpRegressionNative]::GetWindowText(
+                $handle, $title, $title.Capacity)
+            [void][HelpRegressionNative]::GetClassName(
+                $handle, $class, $class.Capacity)
+            [void]$items.Add([pscustomobject]@{
+                Handle = $handle
+                Class = $class.ToString()
+                Text = $title.ToString()
+            })
+        }
+        return $true
+    }, [IntPtr]::Zero)
+    return @($items)
+}
+
+function Get-VisibleChildText([IntPtr]$Parent) {
+    $items = [System.Collections.ArrayList]::new()
+    [void][HelpRegressionNative]::EnumChildWindows($Parent, {
+        param($handle, $unused)
+        if ([HelpRegressionNative]::IsWindowVisible($handle)) {
+            $text = [Text.StringBuilder]::new(256)
+            [void][HelpRegressionNative]::GetWindowText(
+                $handle, $text, $text.Capacity)
+            if (-not [string]::IsNullOrWhiteSpace($text.ToString())) {
+                [void]$items.Add($text.ToString())
+            }
         }
         return $true
     }, [IntPtr]::Zero)
@@ -130,6 +177,20 @@ try {
     $mainMenu = [HelpRegressionNative]::GetMenu(
         $process.MainWindowHandle)
     $viewMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 1)
+    $findCommand = [HelpRegressionNative]::GetMenuItemID($viewMenu, 0)
+    [void][HelpRegressionNative]::SendMessage(
+        $process.MainWindowHandle, 0x0111,
+        [IntPtr]$findCommand, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 300
+    $findTexts = Get-VisibleChildText $process.MainWindowHandle
+    if ($findTexts -notcontains "查找" -and
+        $findTexts -notcontains "Find") {
+        throw "Initial find bar caption was not localized."
+    }
+
+    $mainMenu = [HelpRegressionNative]::GetMenu(
+        $process.MainWindowHandle)
+    $viewMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 1)
     $languageMenu =
         [HelpRegressionNative]::GetSubMenu($viewMenu, 3)
     $languageCommand =
@@ -155,7 +216,44 @@ try {
     if ($topMenuText.ToString() -ne $expectedTopMenu) {
         throw "Menu language did not switch to '$expectedTopMenu'. Got '$topMenuText'."
     }
+    $englishFindTexts = Get-VisibleChildText $process.MainWindowHandle
+    if ($systemIsChinese -and
+        ($englishFindTexts -notcontains "Find" -or
+         $englishFindTexts -notcontains "Type to search")) {
+        throw "Find bar did not refresh to English."
+    }
+    if (-not $systemIsChinese -and
+        ($englishFindTexts -notcontains "查找" -or
+         $englishFindTexts -notcontains "输入内容后开始查找")) {
+        throw "Find bar did not refresh to Simplified Chinese."
+    }
+
     $helpMenu = [HelpRegressionNative]::GetSubMenu($mainMenu, 2)
+    $aboutCommand = [HelpRegressionNative]::GetMenuItemID($helpMenu, 2)
+    [void][HelpRegressionNative]::PostMessage(
+        $process.MainWindowHandle, 0x0111,
+        [IntPtr]$aboutCommand, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 500
+    $aboutTitle = if ($systemIsChinese) {
+        "About QuikMark"
+    } else {
+        "关于 QuikMark"
+    }
+    $aboutButtonText = if ($systemIsChinese) { "OK" } else { "确定" }
+    $aboutWindow = Get-ProcessWindows $process.Id |
+        Where-Object { $_.Text -like "*$aboutTitle*" } |
+        Select-Object -First 1
+    if ($aboutWindow -eq $null) {
+        throw "Localized About dialog did not open."
+    }
+    $aboutChildren = Get-VisibleChildText $aboutWindow.Handle
+    if ($aboutChildren -notcontains $aboutButtonText) {
+        throw "Localized About button was not found. Text: $($aboutChildren -join ' | ')"
+    }
+    [void][HelpRegressionNative]::SendMessage(
+        $aboutWindow.Handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+
     $usageCommand = [HelpRegressionNative]::GetMenuItemID($helpMenu, 0)
     $helpItemText = [Text.StringBuilder]::new(128)
     [void][HelpRegressionNative]::GetMenuString(
@@ -226,6 +324,7 @@ try {
         InitialHelpTab = $initialHelpName
         SwitchedHelpTab = $switchedHelpName
         MenuLanguage = $expectedTopMenu
+        AboutDialog = "PASS"
         LanguagePersistence = "PASS"
         SingleInstance = "PASS"
         RecentDocuments = "PASS"

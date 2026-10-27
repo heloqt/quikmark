@@ -158,8 +158,9 @@ Search is case-insensitive for English and matches Chinese text literally.
 - `http`, `https`, and `mailto` links use the system default application.
 - Unsupported Markdown or Mermaid content falls back to its source text.
 - System, light, and dark themes are available under **View > Appearance**.
-- Menu language is available under **View > Language** and is saved for the
-  next launch.
+- UI language is available under **View > Language** and is saved for the next
+  launch. Menus, the empty page, find bar, dialogs, and the usage guide switch
+  together.
 
 ## 7. File Changes and Reading State
 

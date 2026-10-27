@@ -100,7 +100,7 @@ TabOpenResult TabManager::OpenFile(const wxString& path) {
 TabOpenResult TabManager::ReloadSelected(wxString* error) {
     TabSession* current = selectedMutable();
     if (current == nullptr) {
-        SetError(error, "没有可重新加载的文档");
+        SetError(error, "No document to reload");
         return TabOpenResult::Failed;
     }
 
@@ -164,14 +164,14 @@ bool TabManager::LoadFileAndParse(
         *timings = {};
     }
     if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
-        SetError(error, "加载已取消");
+        SetError(error, "Loading cancelled");
         return false;
     }
     if (!ReadUtf8File(path, content, error, timings)) {
         return false;
     }
     if (cancelled != nullptr && cancelled->load(std::memory_order_relaxed)) {
-        SetError(error, "加载已取消");
+        SetError(error, "Loading cancelled");
         return false;
     }
 
@@ -273,29 +273,29 @@ bool TabManager::ReadUtf8File(
     const auto readStarted = std::chrono::steady_clock::now();
     wxFileName fileInfo(path);
     if (!fileInfo.FileExists()) {
-        SetError(error, "文件不存在");
+        SetError(error, "File does not exist");
         return false;
     }
     if (fileInfo.GetSize() > kMaxFileSize) {
-        SetError(error, "文件超过 64 MiB 安全上限");
+        SetError(error, "File exceeds the 64 MiB safety limit");
         return false;
     }
 
     wxFile file;
     if (!file.Open(path, wxFile::read)) {
-        SetError(error, "无法打开文件");
+        SetError(error, "Unable to open file");
         return false;
     }
 
     const wxFileOffset length = file.Length();
     if (length < 0 || length > kMaxFileSize) {
-        SetError(error, "文件大小无效");
+        SetError(error, "Invalid file size");
         return false;
     }
 
     std::string bytes(static_cast<std::size_t>(length), '\0');
     if (length > 0 && file.Read(bytes.data(), static_cast<std::size_t>(length)) != length) {
-        SetError(error, "读取文件失败");
+        SetError(error, "Failed to read file");
         return false;
     }
     const auto readFinished = std::chrono::steady_clock::now();
@@ -316,7 +316,8 @@ bool TabManager::ReadUtf8File(
     }
 
     if (!IsValidUtf8(bytes, offset)) {
-        SetError(error, "文件编码不受支持或内容已损坏，仅支持 UTF-8");
+        SetError(error, "File encoding is unsupported or damaged; "
+                        "only UTF-8 is supported");
         return false;
     }
 

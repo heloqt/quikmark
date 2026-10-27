@@ -157,7 +157,7 @@ void TestInvalidUtf8VariantsAreRejected() {
         Check(!error.empty(), "invalid UTF-8 should report an error");
         Check(document == nullptr,
               "invalid UTF-8 must not produce a parsed document");
-        Check(error.find(wxString::FromUTF8("仅支持 UTF-8")) != wxString::npos,
+        Check(error.find("UTF-8") != wxString::npos,
               "invalid UTF-8 error should state the supported encoding");
     }
 }
@@ -187,7 +187,7 @@ void TestMissingFile() {
         WxPath(temp.File("missing.md")), nullptr, &content, &document,
         &error);
     Check(!ok, "missing file should fail");
-    Check(error == wxString::FromUTF8("文件不存在"),
+    Check(error == "File does not exist",
           "missing file should return a clear error");
 }
 
@@ -204,7 +204,7 @@ void TestPreCancelledRead() {
     const bool ok = litemark::TabManager::LoadFileAndParse(
         WxPath(path), &cancelled, &content, &document, &error);
     Check(!ok, "pre-cancelled file load should fail");
-    Check(error == wxString::FromUTF8("加载已取消"),
+    Check(error == "Loading cancelled",
           "cancelled file load should report cancellation");
 }
 

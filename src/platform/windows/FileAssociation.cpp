@@ -1,5 +1,6 @@
 #include "platform/FileAssociation.h"
 
+#include "app/Localization.h"
 #include "app/ProductInfo.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -54,7 +55,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
     const std::wstring executable = ExecutablePath();
     if (executable.empty()) {
         if (error != nullptr) {
-            *error = wxString::FromUTF8("无法获取 QuikMark 可执行文件路径");
+            *error = litemark::Tr(
+                "Unable to determine the QuikMark executable path");
         }
         return false;
     }
@@ -70,7 +72,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
         if (!SetValue(HKEY_CURRENT_USER, extension, nullptr,
                       kWindowsProgId)) {
             if (error != nullptr) {
-                *error = wxString::FromUTF8("写入文件扩展名关联失败");
+                *error = litemark::Tr(
+                    "Failed to write the file extension association");
             }
             return false;
         }
@@ -86,7 +89,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
                   (progId + L"\\shell\\open\\command").c_str(), nullptr,
                   openCommand)) {
         if (error != nullptr) {
-            *error = wxString::FromUTF8("注册 Markdown 打开命令失败");
+            *error = litemark::Tr(
+                "Failed to register the Markdown open command");
         }
         return false;
     }
@@ -104,7 +108,8 @@ bool RegisterLiteMarkFileAssociations(wxString* error) {
                   (application + L"\\SupportedTypes\\.markdown").c_str(),
                   nullptr, L"")) {
         if (error != nullptr) {
-            *error = wxString::FromUTF8("注册“打开方式”失败");
+            *error = litemark::Tr(
+                "Failed to register the application in Open With");
         }
         return false;
     }

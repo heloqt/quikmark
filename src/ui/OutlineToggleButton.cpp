@@ -1,5 +1,6 @@
 #include "ui/OutlineToggleButton.h"
 
+#include "app/Localization.h"
 #include <wx/dcbuffer.h>
 #ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
@@ -31,8 +32,8 @@ void OutlineToggleButton::SetExpanded(bool expanded) {
         static_cast<HWND>(GetHandle()),
         expanded_ ? L"\x25C0" : L"\x25B6");
 #endif
-    SetToolTip(expanded ? wxString::FromUTF8("收起目录")
-                        : wxString::FromUTF8("展开目录"));
+    SetToolTip(expanded ? Tr("Collapse outline")
+                        : Tr("Expand outline"));
     Refresh();
 }
 

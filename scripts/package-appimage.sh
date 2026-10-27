@@ -96,6 +96,7 @@ notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
 usage_en_source="${project_root}/doc/12-Usage.md"
 locale_source="${project_root}/assets/locale/zh_CN/LC_MESSAGES/quikmark.mo"
+wx_locale_source="${project_root}/assets/locale/zh_CN/LC_MESSAGES/wxstd-3.3.mo"
 desktop-file-validate "${desktop_source}"
 
 work_dir="${project_root}/build/appimage-package"
@@ -155,6 +156,8 @@ install -D -m 0644 "${usage_en_source}" \
     "${appdir}/usr/share/quikmark/Usage.md"
 install -D -m 0644 "${locale_source}" \
     "${appdir}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES/quikmark.mo"
+install -D -m 0644 "${wx_locale_source}" \
+    "${appdir}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES/wxstd-3.3.mo"
 install -D -m 0644 "${notice_source}" \
     "${appdir}/usr/share/quikmark/THIRD_PARTY_NOTICES.md"
 

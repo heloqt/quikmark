@@ -1,5 +1,6 @@
 #include "ui/TableLayout.h"
 
+#include "app/Localization.h"
 #include "core/document/DocumentText.h"
 #include "ui/TextLayout.h"
 
@@ -28,9 +29,8 @@ int MeasureCellWidth(wxDC& dc,
         wxString text = wxString::FromUTF8(sourceSpan.text);
         if (sourceSpan.image) {
             text = text.empty()
-                       ? wxString::FromUTF8("[图片]")
-                       : wxString::FromUTF8("[图片: ") + text +
-                             wxString::FromUTF8("]");
+                       ? litemark::Tr("[Image]")
+                       : litemark::Tr("[Image: ") + text + "]";
         }
         style.pointSize = litemark::detail::ScaledPointSize(
             style.pointSize, fontScale);

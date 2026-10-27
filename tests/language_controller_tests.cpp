@@ -63,6 +63,28 @@ int main() {
           "Chinese appearance translation mismatch");
     Check(wxGetTranslation("Outline") == wxString::FromUTF8("目录"),
           "Chinese outline translation mismatch");
+    Check(wxGetTranslation("Type to search") ==
+              wxString::FromUTF8("输入内容后开始查找"),
+          "Chinese find-bar translation mismatch");
+    Check(wxGetTranslation("Image unavailable") ==
+              wxString::FromUTF8("图片不可用"),
+          "Chinese media placeholder translation mismatch");
+    Check(wxGetTranslation("Collapse outline") ==
+              wxString::FromUTF8("收起目录"),
+          "Chinese outline tooltip translation mismatch");
+    Check(wxGetTranslation("OK") == wxString::FromUTF8("确定"),
+          "wxWidgets Chinese standard catalog was not loaded");
+    Check(wxGetTranslation(
+              "Native, lightweight Markdown reader\n"
+              "Fast opening, focused reading, no editing\n"
+              "\n"
+              "Build: ") ==
+              wxString::FromUTF8(
+                  "原生、轻量的 Markdown 阅读器\n"
+                  "快速打开，专注阅读，不提供编辑功能\n"
+                  "\n"
+                  "构建："),
+          "Chinese About translation mismatch");
     Check(controller.HelpLocaleCode() == "zh_CN",
           "Chinese help locale mismatch");
 

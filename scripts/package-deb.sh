@@ -72,6 +72,7 @@ notice_source="${project_root}/THIRD_PARTY_NOTICES.md"
 usage_source="${project_root}/doc/12-使用说明.md"
 usage_en_source="${project_root}/doc/12-Usage.md"
 locale_source="${project_root}/assets/locale/zh_CN/LC_MESSAGES/quikmark.mo"
+wx_locale_source="${project_root}/assets/locale/zh_CN/LC_MESSAGES/wxstd-3.3.mo"
 
 rm -rf "${stage}"
 mkdir -p \
@@ -119,6 +120,8 @@ install -m 0644 "${usage_en_source}" \
     "${stage}/usr/share/quikmark/Usage.md"
 install -m 0644 "${locale_source}" \
     "${stage}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES/quikmark.mo"
+install -m 0644 "${wx_locale_source}" \
+    "${stage}/usr/share/quikmark/locale/zh_CN/LC_MESSAGES/wxstd-3.3.mo"
 install -m 0644 "${notice_source}" \
     "${stage}/usr/share/quikmark/THIRD_PARTY_NOTICES.md"
 desktop-file-validate \
