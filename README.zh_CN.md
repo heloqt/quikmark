@@ -31,6 +31,12 @@ AMD 测试机安装的软件和安全组件较多，系统使用时间也较长�
 [Intel Core i5-14500 性能测试记录](doc/17-Intel-14500性能测试记录.md)和
 [电源模式性能对比](doc/10-电源模式性能对比.md)。
 
+## 界面预览
+
+| 浅色 · 无目录 | 深色 · 带目录 |
+| --- | --- |
+| <img src="assets/screenshots/quikmark-light-no-outline.png" alt="QuikMark 浅色主题，无目录" width="100%"> | <img src="assets/screenshots/quikmark-dark-outline.png" alt="QuikMark 深色主题，带目录" width="100%"> |
+
 ## 下载
 
 项目主页：[Gitee](https://gitee.com/heloqt/quikmark) |

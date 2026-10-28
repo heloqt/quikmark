@@ -39,6 +39,12 @@ See the detailed
 [Intel Core i5-14500 performance test record](doc/17-Intel-14500性能测试记录.md)
 and [power mode comparison](doc/10-电源模式性能对比.md).
 
+## Screenshots
+
+| Light theme, outline hidden | Dark theme, outline expanded |
+| --- | --- |
+| <img src="assets/screenshots/quikmark-en-light-no-outline.png" alt="QuikMark light theme without outline" width="100%"> | <img src="assets/screenshots/quikmark-en-dark-outline.png" alt="QuikMark dark theme with outline" width="100%"> |
+
 ## Download
 
 Project home:
