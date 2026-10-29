@@ -2,6 +2,7 @@
 
 #include "app/Localization.h"
 #include "core/document/DocumentText.h"
+#include "core/layout/ReadingLayout.h"
 #include "ui/TextLayout.h"
 
 #include <wx/string.h>
@@ -62,7 +63,7 @@ void BuildTableLayout(
     wxDC& dc,
     const Block& block,
     BlockLayout& item,
-    int width,
+    int availableWidth,
     double scale,
     double fontScale,
     FontMap* fonts) {
@@ -72,6 +73,8 @@ void BuildTableLayout(
         columnCount = std::max(columnCount, row.size());
     }
     if (rowCount == 0 || columnCount == 0) {
+        item.width = ReadingTableWidth(
+            0, availableWidth, scale, fontScale);
         item.height = 20;
         return;
     }
@@ -120,10 +123,26 @@ void BuildTableLayout(
         std::accumulate(minimums.begin(), minimums.end(), 0);
     const int totalDesired =
         std::accumulate(desired.begin(), desired.end(), 0);
+    const int width = ReadingTableWidth(
+        totalDesired, availableWidth, scale, fontScale);
+    item.width = width;
     std::vector<int> columnWidths(columnCount, minColumnWidth);
 
     if (totalDesired <= width) {
         columnWidths = desired;
+        const int extra = width - totalDesired;
+        int assigned = 0;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            const int share =
+                totalDesired > 0
+                    ? extra * desired[column] / totalDesired
+                    : 0;
+            columnWidths[column] += share;
+            assigned += share;
+        }
+        if (!columnWidths.empty() && assigned < extra) {
+            columnWidths.back() += extra - assigned;
+        }
     } else if (totalMinimum <= width) {
         int flexible = 0;
         for (std::size_t column = 0; column < columnCount; ++column) {

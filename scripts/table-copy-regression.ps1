@@ -185,7 +185,7 @@ try {
     }
     Focus-Window $process.MainWindowHandle $document.Handle
 
-    Send-MouseDrag $document.Handle 43 96 80 96
+    Send-MouseDrag $document.Handle 80 96 160 96
     [void][TableCopyRegressionNative]::SendMessage(
         $document.Handle, 0x0301, [IntPtr]::Zero, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 250
@@ -195,7 +195,7 @@ try {
         throw "Table cell selection copy failed. Clipboard: $selected"
     }
 
-    Send-MouseDrag $document.Handle 43 96 175 128
+    Send-MouseDrag $document.Handle 80 96 650 128
     [void][TableCopyRegressionNative]::SendMessage(
         $document.Handle, 0x0301, [IntPtr]::Zero, [IntPtr]::Zero)
     Start-Sleep -Milliseconds 250
@@ -210,7 +210,7 @@ try {
     [void][TableCopyRegressionNative]::GetWindowRect(
         $document.Handle, [ref]$documentRect)
     $menuPoint = Make-LParam `
-        ($documentRect.Left + 90) ($documentRect.Top + 60)
+        ($documentRect.Left + 130) ($documentRect.Top + 60)
     [void][TableCopyRegressionNative]::PostMessage(
         $document.Handle, 0x007B, $document.Handle, $menuPoint)
     Start-Sleep -Milliseconds 400

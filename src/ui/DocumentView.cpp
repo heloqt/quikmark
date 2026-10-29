@@ -5,6 +5,7 @@
 #include "core/document/DocumentText.h"
 #include "core/document/TableClipboard.h"
 #include "core/layout/ListLayout.h"
+#include "core/layout/ReadingLayout.h"
 #include "core/policy/ResourcePolicy.h"
 #include "platform/PerformanceTrace.h"
 #include "ui/BlockLayout.h"
@@ -314,7 +315,8 @@ struct DocumentView::Impl {
     }
 
     int PageMargin(wxDC& dc) const {
-        return static_cast<int>(std::lround(34 * Scale(dc)));
+        return ScaleReadingDip(
+            litemark::kReadingPageMarginDip, Scale(dc));
     }
 
     int EstimateHeight(const Block& block, int width, double scale) const {
@@ -390,6 +392,8 @@ struct DocumentView::Impl {
         const int maxContentWidth =
             std::max(120, clientWidth - pageMargin * 2);
         const double scale = Scale(dc);
+        const int textColumnWidth =
+            litemark::ReadingTextWidth(maxContentWidth, scale, fontScale);
         layout->slots.reserve(document->blocks.size());
         for (const Block& block : document->blocks) {
             const int quoteIndent = static_cast<int>(
@@ -398,7 +402,7 @@ struct DocumentView::Impl {
                 block.listDepth, block.listOrdered, block.listIndex,
                 scale, fontScale);
             const int width =
-                std::max(80, maxContentWidth - quoteIndent -
+                std::max(80, textColumnWidth - quoteIndent -
                                   listLayout.textOffset);
             const int estimatedHeight = EstimateHeight(block, width, scale);
             layout->slots.push_back(
@@ -425,19 +429,29 @@ struct DocumentView::Impl {
                                  int clientWidth) {
         const Block& block = document->blocks[index];
         const double scale = Scale(dc);
-        const int pageMargin = static_cast<int>(std::lround(34 * scale));
+        const int pageMargin = litemark::ScaleReadingDip(
+            litemark::kReadingPageMarginDip, scale);
         const int maxContentWidth =
             std::max(120, clientWidth - pageMargin * 2);
+        const int textColumnWidth =
+            litemark::ReadingTextWidth(maxContentWidth, scale, fontScale);
+        const int textColumnLeft =
+            pageMargin +
+            litemark::CenteredReadingLeft(
+                maxContentWidth, textColumnWidth);
         const int quoteIndent =
             static_cast<int>(std::lround(block.quoteDepth * 18 * scale));
         const ListLayoutMetrics listLayout = ComputeListLayout(
             block.listDepth, block.listOrdered, block.listIndex,
             scale, fontScale);
         const int listMarkerX =
-            pageMargin + quoteIndent + listLayout.markerOffset;
+            textColumnLeft + quoteIndent + listLayout.markerOffset;
         const int x =
-            pageMargin + quoteIndent + listLayout.textOffset;
+            textColumnLeft + quoteIndent + listLayout.textOffset;
         const int width =
+            std::max(80, textColumnWidth - quoteIndent -
+                              listLayout.textOffset);
+        const int tableAvailableWidth =
             std::max(80, maxContentWidth - quoteIndent -
                               listLayout.textOffset);
         const int before =
@@ -466,7 +480,11 @@ struct DocumentView::Impl {
                 dc, item, width, scale, fontScale, &fonts);
         } else if (block.kind == BlockKind::Table) {
             BuildTableLayout(
-                dc, block, item, width, scale, fontScale, &fonts);
+                dc, block, item, tableAvailableWidth,
+                scale, fontScale, &fonts);
+            item.x = pageMargin + quoteIndent + listLayout.textOffset +
+                     litemark::CenteredReadingLeft(
+                         tableAvailableWidth, item.width);
         } else if (block.kind == BlockKind::Code ||
                    block.kind == BlockKind::Html) {
             TextStyle style = BaseStyle(block);

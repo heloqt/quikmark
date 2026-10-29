@@ -10,7 +10,7 @@ void BuildTableLayout(
     wxDC& dc,
     const Block& block,
     BlockLayout& item,
-    int width,
+    int availableWidth,
     double scale,
     double fontScale,
     FontMap* fonts);

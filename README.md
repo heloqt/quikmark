@@ -8,7 +8,7 @@ provide editing.
 
 It does not use Electron or depend on Chromium or another browser engine.
 
-Current version: **1.2.0**
+Current version: **1.2.1**
 
 The application UI and bundled usage guides support English and Simplified
 Chinese. Language can be selected under **View > Language** or follow the
@@ -46,24 +46,26 @@ Project home:
 [GitHub](https://github.com/heloqt/quikmark)
 
 Releases:
-[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.0) |
-[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.0)
+[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.1) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.1)
 
 | Platform | Package | Size | Download |
 | --- | --- | --- | --- |
-| Windows 10/11 x64 | `quikmark-1.2.0-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-setup.exe) |
-| Windows 10/11 x64 | `quikmark-1.2.0-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark-1.2.0-x64.msi) |
-| Ubuntu 22.04+ x64 | `quikmark_1.2.0_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/quikmark_1.2.0_amd64.deb) |
-| Linux x86-64 | `QuikMark-1.2.0-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/QuikMark-1.2.0-x86_64.AppImage) |
+| Windows 10/11 x64 | `quikmark-1.2.1-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.2.1-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.2.1_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark_1.2.1_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark_1.2.1_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.2.1-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/QuikMark-1.2.1-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/QuikMark-1.2.1-x86_64.AppImage) |
 
 SHA256 checksums:
-[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt) /
-[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.0/SHA256-1.2.0.txt)
+[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/SHA256-1.2.1.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/SHA256-1.2.1.txt)
 
 ## Features
 
 - Native single-window, multi-tab reader for Windows and Linux. Read-only,
   with no editing or saving support.
+- A centered 840 DIP reading column keeps long lines comfortable on wide
+  displays; tables can expand to 1032 DIP before scrolling internally.
 - Open files from the File menu, drag and drop, Explorer or Linux desktop file
   associations, and path forwarding to an existing single-instance window.
 - Reads UTF-8 and UTF-8 BOM documents up to 64 MiB.
@@ -125,7 +127,7 @@ The `.deb` package targets Ubuntu 22.04 x86-64 and compatible newer
 distributions:
 
 ```bash
-  sudo apt install ./quikmark_1.2.0_amd64.deb
+  sudo apt install ./quikmark_1.2.1_amd64.deb
 ```
 
 - After installation, the executable is `quikmark`, and the usage guide is at
@@ -133,14 +135,14 @@ distributions:
 - Make the AppImage executable before running it:
 
   ```bash
-  chmod +x QuikMark-1.2.0-x86_64.AppImage
-  ./QuikMark-1.2.0-x86_64.AppImage
+  chmod +x QuikMark-1.2.1-x86_64.AppImage
+  ./QuikMark-1.2.1-x86_64.AppImage
   ```
 
 - If FUSE 2 is unavailable, run the AppImage with:
 
   ```bash
-  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.0-x86_64.AppImage
+  APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.1-x86_64.AppImage
   ```
 
 - AppImage does not automatically become the default Markdown application.

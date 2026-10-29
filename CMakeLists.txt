@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(QuikMark VERSION 1.2.0 LANGUAGES CXX)
+project(QuikMark VERSION 1.2.1 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -395,6 +395,19 @@ if(LITEMARK_BUILD_TESTS)
     endif()
     add_test(NAME document_text_selection COMMAND litemark_document_text_tests)
 
+    add_executable(litemark_reading_layout_tests
+        tests/reading_layout_tests.cpp
+    )
+    target_include_directories(litemark_reading_layout_tests PRIVATE src)
+    if(MINGW)
+        target_link_options(litemark_reading_layout_tests PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+        )
+    endif()
+    add_test(NAME reading_layout COMMAND litemark_reading_layout_tests)
+
     add_executable(litemark_language_controller_tests
         tests/language_controller_tests.cpp
         src/app/LanguageController.cpp
@@ -617,6 +630,7 @@ if(LITEMARK_BUILD_TESTS)
         file_loading_encoding
         theme_controller
         document_text_selection
+        reading_layout
         language_controller
         table_clipboard_export
         status_icon_detection

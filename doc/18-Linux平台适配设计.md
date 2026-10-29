@@ -548,6 +548,27 @@ size: 37,771,768 bytes
 sha256: fdc173c95c74e50d917c2321ee150865083752796bdeef0afa80a409243cc14a
 ```
 
+### 12.9 QuikMark 1.2.1 Linux 发行验证
+
+QuikMark 1.2.1 增加居中阅读版心：正文最大 840 DIP，表格在 840–1032 DIP
+之间自适应。Linux 在 Ubuntu 22.04.5 x86-64 chroot 中重新构建：
+
+- Linux 单元测试 23/23 通过。
+- AppImage 内置 Xvfb 启动冒烟通过。
+- `.deb` 包含中英文使用说明、中文菜单语言包和 wxWidgets 中文标准目录。
+
+最终包：
+
+```text
+dist/quikmark_1.2.1_amd64.deb
+size: 4,148,284 bytes
+sha256: b56427f246cde088a37c5959b369240272d53da4ffe79e3782ed86103ea6ce4a
+
+dist/QuikMark-1.2.1-x86_64.AppImage
+size: 37,771,768 bytes
+sha256: a19271b1723431bf5d10c8403de2b6e5411198a4b7597c9afe33b6896add12e7
+```
+
 ### 12.5 Ubuntu 22.04 AppImage 验证
 
 AppImage 在 Ubuntu 22.04.5 chroot 中构建：
