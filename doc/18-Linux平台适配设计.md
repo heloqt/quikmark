@@ -569,6 +569,28 @@ size: 37,771,768 bytes
 sha256: a19271b1723431bf5d10c8403de2b6e5411198a4b7597c9afe33b6896add12e7
 ```
 
+### 12.10 QuikMark 1.2.2 Linux 发行验证
+
+QuikMark 1.2.2 修复 Windows 安装包中英文使用说明因临时文件名仅大小写
+不同而互相覆盖的问题，并同步更新发行版本号。Linux 在 Ubuntu 22.04.5
+x86-64 chroot 中重新构建：
+
+- Linux 单元测试 23/23 通过。
+- `.deb` 在 Xvfb 下启动冒烟通过，包内中英文使用说明标题和内容哈希均已核对。
+- AppImage 内置 Xvfb 启动冒烟通过。
+
+最终包：
+
+```text
+dist/quikmark_1.2.2_amd64.deb
+size: 4,148,922 bytes
+sha256: e979e2972e7933853f130edf7a739e470b66891b14819c50c40c91f625c79250
+
+dist/QuikMark-1.2.2-x86_64.AppImage
+size: 37,771,768 bytes
+sha256: a548fad1fb3bb59cfd96a38da92f6797bd64621f1db8d8bc54d2ba185f012fdf
+```
+
 ### 12.5 Ubuntu 22.04 AppImage 验证
 
 AppImage 在 Ubuntu 22.04.5 chroot 中构建：

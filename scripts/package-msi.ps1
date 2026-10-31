@@ -49,8 +49,8 @@ if ([string]::IsNullOrWhiteSpace($Output)) {
 
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
 $usageEnglishSource = Join-Path $projectRoot "doc\12-Usage.md"
-$usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
-$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-Usage.md"
+$usageFile = Join-Path $projectRoot "build\QuikMark-usage-zh-CN-msi.md"
+$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-usage-en-msi.md"
 $localeDir = Join-Path $projectRoot "build\mingw-release-static\bin\locale"
 $iconFile = Join-Path $projectRoot "build\QuikMark-installer.ico"
 $licenseFile = Join-Path $projectRoot "LICENSE"
@@ -67,6 +67,20 @@ foreach ($required in @(
 }
 Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
 Copy-Item -LiteralPath $usageEnglishSource -Destination $usageEnglishFile -Force
+$usageHeading = Get-Content -LiteralPath $usageFile -TotalCount 1
+$usageEnglishHeading = Get-Content -LiteralPath $usageEnglishFile -TotalCount 1
+if ($usageHeading -ne "# QuikMark 使用说明") {
+    throw "Unexpected Chinese usage document heading: $usageHeading"
+}
+if ($usageEnglishHeading -ne "# QuikMark Usage Guide") {
+    throw "Unexpected English usage document heading: $usageEnglishHeading"
+}
+$usageHash = (Get-FileHash -LiteralPath $usageFile -Algorithm SHA256).Hash
+$usageEnglishHash =
+    (Get-FileHash -LiteralPath $usageEnglishFile -Algorithm SHA256).Hash
+if ($usageHash -eq $usageEnglishHash) {
+    throw "Chinese and English usage documents must not be identical."
+}
 
 Add-Type -AssemblyName System.Drawing
 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($Exe)

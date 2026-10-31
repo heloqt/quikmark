@@ -7,7 +7,7 @@ QuikMark 是一个使用 C++（wxWidgets）构建的原生、轻量 Markdown 阅
 
 它不使用 Electron，也不依赖 Chromium 或其他浏览器内核。
 
-当前版本：**1.2.1**
+当前版本：**1.2.2**
 
 ## 性能
 
@@ -42,18 +42,18 @@ AMD 测试机安装的软件和安全组件较多，系统使用时间也较长�
 项目主页：[Gitee](https://gitee.com/heloqt/quikmark) |
 [GitHub](https://github.com/heloqt/quikmark)
 
-发布页面：[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.1) |
-[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.1)
+发布页面：[Gitee Releases](https://gitee.com/heloqt/quikmark/releases/tag/V1.2.2) |
+[GitHub Releases](https://github.com/heloqt/quikmark/releases/tag/V1.2.2)
 
 | 平台 | 安装包 | 大小 | 下载 |
 | --- | --- | --- | --- |
-| Windows 10/11 x64 | `quikmark-1.2.1-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-setup.exe) |
-| Windows 10/11 x64 | `quikmark-1.2.1-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark-1.2.1-x64.msi) |
-| Ubuntu 22.04+ x64 | `quikmark_1.2.1_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/quikmark_1.2.1_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/quikmark_1.2.1_amd64.deb) |
-| Linux x86-64 | `QuikMark-1.2.1-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/QuikMark-1.2.1-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/QuikMark-1.2.1-x86_64.AppImage) |
+| Windows 10/11 x64 | `quikmark-1.2.2-setup.exe` | 4.21 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.2/quikmark-1.2.2-setup.exe) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.2/quikmark-1.2.2-setup.exe) |
+| Windows 10/11 x64 | `quikmark-1.2.2-x64.msi` | 4.41 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.2/quikmark-1.2.2-x64.msi) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.2/quikmark-1.2.2-x64.msi) |
+| Ubuntu 22.04+ x64 | `quikmark_1.2.2_amd64.deb` | 3.96 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.2/quikmark_1.2.2_amd64.deb) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.2/quikmark_1.2.2_amd64.deb) |
+| Linux x86-64 | `QuikMark-1.2.2-x86_64.AppImage` | 36.02 MiB | [Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.2/QuikMark-1.2.2-x86_64.AppImage) / [GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.2/QuikMark-1.2.2-x86_64.AppImage) |
 
-SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.1/SHA256-1.2.1.txt) /
-[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.1/SHA256-1.2.1.txt)
+SHA256 校验文件：[Gitee](https://gitee.com/heloqt/quikmark/releases/download/V1.2.2/SHA256-1.2.2.txt) /
+[GitHub](https://github.com/heloqt/quikmark/releases/download/V1.2.2/SHA256-1.2.2.txt)
 
 ## 功能
 
@@ -97,12 +97,12 @@ Windows：
 Linux：
 
 - `.deb` 面向 Ubuntu 22.04 x86-64 及兼容的新发行版，可用
-  `sudo apt install ./quikmark_1.2.1_amd64.deb` 安装。
+  `sudo apt install ./quikmark_1.2.2_amd64.deb` 安装。
 - `.deb` 安装后程序入口为 `quikmark`，使用说明位于
   `/usr/share/quikmark/使用说明.md`。
-- AppImage 使用前需要执行 `chmod +x QuikMark-1.2.1-x86_64.AppImage`；
+- AppImage 使用前需要执行 `chmod +x QuikMark-1.2.2-x86_64.AppImage`；
   系统没有 FUSE 2 时可执行
-  `APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.1-x86_64.AppImage`。
+  `APPIMAGE_EXTRACT_AND_RUN=1 ./QuikMark-1.2.2-x86_64.AppImage`。
 - AppImage 不会自动抢占 Markdown 默认打开方式；需要时在
   “文件 > 注册文件关联...”中启用。
 

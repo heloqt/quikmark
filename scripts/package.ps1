@@ -19,8 +19,8 @@ $license = Join-Path $projectRoot "LICENSE"
 $notice = Join-Path $projectRoot "THIRD_PARTY_NOTICES.md"
 $usageSource = Join-Path $projectRoot "doc\12-使用说明.md"
 $usageEnglishSource = Join-Path $projectRoot "doc\12-Usage.md"
-$usageFile = Join-Path $projectRoot "build\QuikMark-usage.md"
-$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-Usage.md"
+$usageFile = Join-Path $projectRoot "build\QuikMark-usage-zh-CN-nsis.md"
+$usageEnglishFile = Join-Path $projectRoot "build\QuikMark-usage-en-nsis.md"
 $localeDir = Join-Path $projectRoot "build\mingw-release-static\bin\locale"
 $distDir = Join-Path $projectRoot "dist"
 $output = Join-Path $distDir "quikmark-$Version-setup.exe"
@@ -46,6 +46,20 @@ foreach ($required in @($usageSource, $usageEnglishSource, $localeDir)) {
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 Copy-Item -LiteralPath $usageSource -Destination $usageFile -Force
 Copy-Item -LiteralPath $usageEnglishSource -Destination $usageEnglishFile -Force
+$usageHeading = Get-Content -LiteralPath $usageFile -TotalCount 1
+$usageEnglishHeading = Get-Content -LiteralPath $usageEnglishFile -TotalCount 1
+if ($usageHeading -ne "# QuikMark 使用说明") {
+    throw "Unexpected Chinese usage document heading: $usageHeading"
+}
+if ($usageEnglishHeading -ne "# QuikMark Usage Guide") {
+    throw "Unexpected English usage document heading: $usageEnglishHeading"
+}
+$usageHash = (Get-FileHash -LiteralPath $usageFile -Algorithm SHA256).Hash
+$usageEnglishHash =
+    (Get-FileHash -LiteralPath $usageEnglishFile -Algorithm SHA256).Hash
+if ($usageHash -eq $usageEnglishHash) {
+    throw "Chinese and English usage documents must not be identical."
+}
 
 & $makensis `
     "/DAPP_VERSION=$Version" `
@@ -70,7 +84,10 @@ if ($artifact.Length -ge $limit) {
 }
 
 $hash = Get-FileHash -LiteralPath $output -Algorithm SHA256
-"$($hash.Hash)  $($artifact.Name)" |
+$checksumLine = "$($hash.Hash)  $($artifact.Name)"
+$checksumLine |
     Set-Content -LiteralPath (Join-Path $distDir "SHA256.txt") -Encoding ASCII
+$checksumLine |
+    Set-Content -LiteralPath "$output.sha256" -Encoding ASCII
 
 Write-Host ("Packaged: {0} ({1:N2} MB)" -f $artifact.FullName, ($artifact.Length / 1MB))
